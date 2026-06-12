@@ -2,6 +2,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { extractTodos } from '@/lib/extractor'
+import { getDb } from '@/lib/db'
+import { todos } from '@/lib/db/schema'
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,7 +26,23 @@ export async function POST(request: NextRequest) {
 
     const result = await extractTodos(emailBody)
 
-    return NextResponse.json(result)
+    // 保存到数据库
+    const db = getDb()
+    const savedTodos = []
+    for (const todo of result.todos) {
+      const saved = db
+        .insert(todos)
+        .values({
+          title: todo.title,
+          dueDate: todo.dueDate || null,
+          priority: todo.priority || null,
+          context: todo.context || null,
+        })
+        .returning()
+      savedTodos.push(saved[0])
+    }
+
+    return NextResponse.json({ todos: savedTodos })
   } catch (error) {
     console.error('[/api/extract] Error:', error)
 

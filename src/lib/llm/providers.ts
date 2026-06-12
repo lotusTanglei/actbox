@@ -17,8 +17,8 @@ export const PROVIDERS: Record<string, LlmProviderConfig> = {
     baseUrlEnvVar: 'DEEPSEEK_BASE_URL',
     modelEnvVar: 'DEEPSEEK_MODEL',
     defaults: {
-      baseUrl: 'https://api.deepseek.com/v1',
-      model: 'deepseek-chat',
+      baseUrl: 'https://api.deepseek.com',
+      model: 'deepseek-v4-flash',
     },
   },
   qwen: {

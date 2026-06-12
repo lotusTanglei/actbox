@@ -6,12 +6,12 @@ import { GOLDEN_EMAILS } from './fixtures'
 
 /**
  * 金标准测试 — 需要真实 LLM API 调用
- * 运行前确保 .env.local 配置了有效的 LLM_API_KEY
- *
  * 运行方式: npm run test:golden
- * 普通测试不会执行这些（describe.skip）
+ * 普通测试不会执行（需要 RUN_GOLDEN_TESTS=true 且有 API key）
  */
-describe.skip('Golden Tests - LLM Extraction (requires API key)', () => {
+const shouldRunGolden = process.env.RUN_GOLDEN_TESTS === 'true'
+
+describe.runIf(shouldRunGolden)('Golden Tests - LLM Extraction', () => {
   GOLDEN_EMAILS.forEach(({ name, input, expectTodos, expectKeywords }) => {
     it(name, async () => {
       const result = await extractTodos(input)

@@ -31,10 +31,16 @@ beforeAll(() => {
       message_id TEXT NOT NULL UNIQUE,
       subject TEXT,
       sender TEXT,
+      recipient TEXT,
       body TEXT,
+      body_html TEXT,
       received_at INTEGER,
       processed_at INTEGER NOT NULL DEFAULT (unixepoch()),
-      direction TEXT NOT NULL DEFAULT 'in'
+      direction TEXT NOT NULL DEFAULT 'in' CHECK(direction IN ('in', 'out', 'draft')),
+      is_read INTEGER NOT NULL DEFAULT 0,
+      is_starred INTEGER NOT NULL DEFAULT 0,
+      is_deleted INTEGER NOT NULL DEFAULT 0,
+      todo_count INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE settings (
       key TEXT PRIMARY KEY,

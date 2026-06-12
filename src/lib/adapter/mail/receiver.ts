@@ -81,6 +81,7 @@ export class MailReceiver {
             subject,
             from,
             body,
+            bodyHtml: parsed.html || undefined,
             receivedAt: parsed.date || new Date(),
           })
         }

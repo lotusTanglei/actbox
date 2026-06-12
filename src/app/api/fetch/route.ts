@@ -63,6 +63,9 @@ export async function POST() {
         continue
       }
 
+      // 抽取待办（先抽取，再存邮件以便记录 todoCount）
+      const extractResult = await extractTodos(msg.body)
+
       // 记录已处理邮件
       db.insert(messages)
         .values({
@@ -70,12 +73,11 @@ export async function POST() {
           subject: msg.subject,
           from: msg.from,
           body: msg.body.substring(0, 500),
+          bodyHtml: msg.bodyHtml || null,
           receivedAt: msg.receivedAt,
+          todoCount: extractResult.todos.length,
         })
         .run()
-
-      // 抽取待办
-      const extractResult = await extractTodos(msg.body)
 
       for (const todo of extractResult.todos) {
         db.insert(todos)

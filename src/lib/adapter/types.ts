@@ -7,6 +7,7 @@ export interface RawMessage {
   subject: string
   from: string
   body: string // 清洗后的纯文本正文
+  bodyHtml?: string // HTML 原文（可选）
   receivedAt: Date
 }
 

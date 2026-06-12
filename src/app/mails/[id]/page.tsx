@@ -116,6 +116,12 @@ export default function MailDetailPage() {
           ← 返回邮件列表
         </Link>
         <div className="flex gap-2">
+          <Link
+            href={`/compose?to=${encodeURIComponent(message.from || '')}&subject=${encodeURIComponent(message.subject || '')}&messageId=${encodeURIComponent(message.messageId)}&originalBody=${encodeURIComponent(message.body || '')}`}
+            className="rounded border px-3 py-1 text-xs transition-colors hover:bg-accent"
+          >
+            ↩ 回复
+          </Link>
           <button onClick={handleToggleStar} className="text-lg" title="星标">
             {message.isStarred ? '⭐' : '☆'}
           </button>

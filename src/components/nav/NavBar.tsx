@@ -6,9 +6,9 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 const navItems = [
-  { href: '/', label: '📋 待办', icon: '📋' },
-  { href: '/mails', label: '📬 邮件', icon: '📬' },
-  { href: '/settings', label: '⚙️ 设置', icon: '⚙️' },
+  { href: '/', label: '📋 待办' },
+  { href: '/mails', label: '📬 邮件' },
+  { href: '/settings', label: '⚙️ 设置' },
 ]
 
 export function NavBar() {
@@ -34,6 +34,12 @@ export function NavBar() {
             {item.label}
           </Link>
         ))}
+        <Link
+          href="/compose"
+          className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
+        >
+          ✉️ 写邮件
+        </Link>
       </div>
     </nav>
   )

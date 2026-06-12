@@ -30,6 +30,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       .set(updates)
       .where(eq(todos.id, todoId))
       .returning()
+      .all()
 
     if (!result.length) {
       return NextResponse.json({ error: 'Todo not found' }, { status: 404 })
@@ -53,7 +54,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Invalid todo id' }, { status: 400 })
     }
 
-    const result = db.delete(todos).where(eq(todos.id, todoId)).returning()
+    const result = db.delete(todos).where(eq(todos.id, todoId)).returning().all()
 
     if (!result.length) {
       return NextResponse.json({ error: 'Todo not found' }, { status: 404 })

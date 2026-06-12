@@ -3,7 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
 import { todos } from '@/lib/db/schema'
-import { eq, desc, and } from 'drizzle-orm'
+import { eq, desc } from 'drizzle-orm'
 
 /** GET /api/todos — 列表，支持筛选 */
 export async function GET(request: NextRequest) {
@@ -12,15 +12,12 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status') // pending | done | all (default: all)
 
-    const conditions = []
+    let result
     if (status && status !== 'all') {
-      conditions.push(eq(todos.status, status))
+      result = db.select().from(todos).where(eq(todos.status, status as 'pending' | 'done')).orderBy(desc(todos.createdAt)).all()
+    } else {
+      result = db.select().from(todos).orderBy(desc(todos.createdAt)).all()
     }
-
-    const result =
-      conditions.length > 0
-        ? db.select().from(todos).where(and(...conditions)).orderBy(desc(todos.createdAt)).all()
-        : db.select().from(todos).orderBy(desc(todos.createdAt)).all()
 
     return NextResponse.json({ todos: result })
   } catch (error) {
@@ -49,6 +46,7 @@ export async function POST(request: NextRequest) {
         context: context || null,
       })
       .returning()
+      .all()
 
     return NextResponse.json({ todo: result[0] }, { status: 201 })
   } catch (error) {

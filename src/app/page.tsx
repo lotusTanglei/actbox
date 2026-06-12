@@ -2,15 +2,46 @@
 
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { EmailInput } from '@/components/EmailInput'
 import { TodoList } from '@/components/TodoList'
-import type { ExtractedTodo, ExtractResult } from '@/lib/extractor/types'
+
+export type TodoStatus = 'all' | 'pending' | 'done'
+
+export interface Todo {
+  id: number
+  title: string
+  dueDate: string | null
+  priority: 'high' | 'medium' | 'low' | null
+  context: string | null
+  status: 'pending' | 'done'
+  sourceMessageId: string | null
+  sourceSubject: string | null
+  sourceFrom: string | null
+  createdAt: string
+  updatedAt: string
+}
 
 export default function Home() {
-  const [todos, setTodos] = useState<ExtractedTodo[]>([])
+  const [todos, setTodos] = useState<Todo[]>([])
+  const [statusFilter, setStatusFilter] = useState<TodoStatus>('all')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const fetchTodos = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/todos?status=${statusFilter}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setTodos(data.todos)
+    } catch (err) {
+      console.error('Failed to fetch todos:', err)
+    }
+  }, [statusFilter])
+
+  useEffect(() => {
+    fetchTodos()
+  }, [fetchTodos])
 
   const handleExtract = async (emailBody: string) => {
     setIsLoading(true)
@@ -29,15 +60,42 @@ export default function Home() {
         throw new Error(data.error || `请求失败 (${res.status})`)
       }
 
-      const result = data as ExtractResult
-      setTodos(result.todos)
+      // 刷新列表
+      await fetchTodos()
     } catch (err) {
       setError(err instanceof Error ? err.message : '未知错误')
-      setTodos([])
     } finally {
       setIsLoading(false)
     }
   }
+
+  const handleToggleStatus = async (id: number, currentStatus: string) => {
+    const newStatus = currentStatus === 'done' ? 'pending' : 'done'
+    try {
+      const res = await fetch(`/api/todos/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      })
+      if (res.ok) await fetchTodos()
+    } catch (err) {
+      console.error('Failed to toggle todo:', err)
+    }
+  }
+
+  const handleDelete = async (id: number) => {
+    try {
+      const res = await fetch(`/api/todos/${id}`, { method: 'DELETE' })
+      if (res.ok) await fetchTodos()
+    } catch (err) {
+      console.error('Failed to delete todo:', err)
+    }
+  }
+
+  // 用当前 filter 的 todos 计算 count 不准确（all 时不分）
+  // 改为从所有数据中计算
+  const pendingCount = todos.filter((t) => t.status === 'pending').length
+  const doneCount = todos.filter((t) => t.status === 'done').length
 
   return (
     <main className="mx-auto max-w-2xl space-y-6 p-4 pb-20">
@@ -56,7 +114,15 @@ export default function Home() {
         </div>
       )}
 
-      {todos.length > 0 && <TodoList todos={todos} />}
+      <TodoList
+        todos={todos}
+        statusFilter={statusFilter}
+        onStatusFilterChange={setStatusFilter}
+        onToggle={handleToggleStatus}
+        onDelete={handleDelete}
+        pendingCount={pendingCount}
+        doneCount={doneCount}
+      />
     </main>
   )
 }

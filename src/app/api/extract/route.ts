@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     const db = getDb()
     const savedTodos = []
     for (const todo of result.todos) {
-      const saved = db
+      const rows = db
         .insert(todos)
         .values({
           title: todo.title,
@@ -39,7 +39,8 @@ export async function POST(request: NextRequest) {
           context: todo.context || null,
         })
         .returning()
-      savedTodos.push(saved[0])
+        .all()
+      if (rows[0]) savedTodos.push(rows[0])
     }
 
     return NextResponse.json({ todos: savedTodos })

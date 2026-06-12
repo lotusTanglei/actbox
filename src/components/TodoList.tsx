@@ -3,6 +3,7 @@
 'use client'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import Link from 'next/link'
 import type { Todo, TodoStatus } from '@/app/page'
 
 interface TodoListProps {
@@ -116,6 +117,28 @@ export function TodoList({
                 <p className="text-xs text-muted-foreground italic">
                   &ldquo;{todo.context}&rdquo;
                 </p>
+              )}
+              {/* 来源邮件信息 + 操作 */}
+              {(todo.sourceFrom || todo.sourceSubject) && (
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span>📧 {todo.sourceFrom}</span>
+                  {todo.sourceSubject && (
+                    <Link
+                      href={`/mails?search=${encodeURIComponent(todo.sourceSubject)}`}
+                      className="text-primary hover:underline"
+                    >
+                      查看原文
+                    </Link>
+                  )}
+                  {todo.sourceFrom && (
+                    <Link
+                      href={`/compose?to=${encodeURIComponent(todo.sourceFrom)}&subject=${encodeURIComponent('Re: ' + (todo.sourceSubject || ''))}&todoContext=${encodeURIComponent(todo.title)}`}
+                      className="text-primary hover:underline"
+                    >
+                      ↩ 回复
+                    </Link>
+                  )}
+                </div>
               )}
             </div>
 

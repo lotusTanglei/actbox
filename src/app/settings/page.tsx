@@ -138,8 +138,11 @@ export default function SettingsPage() {
   ]
 
   return (
-    <main className="mx-auto max-w-2xl space-y-4 p-4 pb-20">
-      <h1 className="text-xl font-bold">⚙️ 设置</h1>
+    <main className="flex h-full flex-col overflow-y-auto">
+      <header className="border-b border-border px-6 py-3">
+        <h1 className="text-lg font-bold text-foreground">⚙️ 设置</h1>
+      </header>
+      <div className="max-w-3xl space-y-4 px-6 py-6">
 
       {/* Tabs */}
       <div className="flex gap-1 rounded-lg bg-muted p-1">
@@ -279,6 +282,7 @@ export default function SettingsPage() {
           </button>
         </div>
       )}
+      </div>
     </main>
   )
 }

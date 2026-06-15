@@ -17,17 +17,22 @@ function ComposeContent() {
   const todoContext = searchParams.get('todoContext') || undefined
 
   return (
-    <main className="mx-auto max-w-2xl space-y-4 p-4 pb-20">
-      <ComposeMail
-        to={replyTo}
-        subject={replySubject.startsWith('Re:') ? replySubject : (replySubject ? `Re: ${replySubject}` : '')}
-        replyToMessageId={replyMessageId}
-        originalBody={originalBody}
-        todoContext={todoContext}
-        onDone={() => router.push('/mails')}
-        onCancel={() => router.back()}
-      />
-    </main>
+    <div className="flex h-full flex-col overflow-y-auto">
+      <header className="border-b border-border px-6 py-3">
+        <h1 className="text-lg font-bold text-foreground">✏️ 写邮件</h1>
+      </header>
+      <div className="max-w-3xl px-6 py-6">
+        <ComposeMail
+          to={replyTo}
+          subject={replySubject.startsWith('Re:') ? replySubject : (replySubject ? `Re: ${replySubject}` : '')}
+          replyToMessageId={replyMessageId}
+          originalBody={originalBody}
+          todoContext={todoContext}
+          onDone={() => router.push('/mails')}
+          onCancel={() => router.back()}
+        />
+      </div>
+    </div>
   )
 }
 

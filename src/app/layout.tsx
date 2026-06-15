@@ -1,7 +1,9 @@
+// src/app/layout.tsx - 客户端布局，加载侧边栏并传递数据
+
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { NavBar } from "@/components/nav/NavBar";
 import "./globals.css";
+import { AppShell } from "@/components/nav/AppShell";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -24,13 +26,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="zh-CN"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col">
-        <NavBar />
-        {children}
+    <html lang="zh-CN" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+      <body className="min-h-full">
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

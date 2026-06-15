@@ -50,15 +50,20 @@ export class MailReceiver {
       const lock = await client.getMailboxLock('INBOX')
 
       try {
-        // 搜索未读邮件
-        const uids = await client.search({ seen: false }, { uid: true })
+        // 用序列号搜索（不用 uid，避免 search/fetch 的 uid 不一致 bug）
+        let seqs = await client.search({ seen: false })
 
-        if (!uids || !Array.isArray(uids) || uids.length === 0) {
+        // 如果没有未读，拉最近的所有邮件（靠 messageId 去重已处理的）
+        if (!seqs || !Array.isArray(seqs) || seqs.length === 0) {
+          seqs = await client.search({ all: true })
+        }
+
+        if (!Array.isArray(seqs) || seqs.length === 0) {
           return []
         }
 
-        // 取最近的 limit 封（UID 倒序）
-        const toFetch = uids.slice(-limit).reverse()
+        // 取最近的 limit 封（序列号倒序）
+        const toFetch = seqs.slice(-limit).reverse()
 
         for await (const msg of client.fetch(toFetch, { source: true })) {
           if (!msg.source) continue

@@ -93,9 +93,9 @@ export class ImapAdapter implements MailAdapter {
             messageId: parsed.messageId || '',
             subject: parsed.subject || null,
             from: parsed.from?.text || null,
-            to: parsed.to?.text || null,
-            cc: parsed.cc?.text || null,
-            bcc: parsed.bcc?.text || null,
+            to: addrText(parsed.to),
+            cc: addrText(parsed.cc),
+            bcc: addrText(parsed.bcc),
             body: cleanEmailBody(parsed.html || undefined, parsed.text || undefined),
             bodyHtml: parsed.html || null,
             receivedAt: parsed.date || null,
@@ -194,4 +194,11 @@ async function safeLogout(client: AnyClient) {
   } catch {
     /* ignore */
   }
+}
+
+/** mailparser 的 to/cc/bcc 可能是 AddressObject | AddressObject[]，统一取 text */
+function addrText(a: any): string | null {
+  if (!a) return null
+  if (Array.isArray(a)) return a.map((x: any) => x?.text).filter(Boolean).join(', ') || null
+  return a.text || null
 }

@@ -72,7 +72,7 @@ export async function POST() {
           messageId: msg.messageId || `no-id-${Date.now()}`,
           subject: msg.subject,
           from: msg.from,
-          body: msg.body.substring(0, 500),
+          body: msg.body,
           bodyHtml: msg.bodyHtml || null,
           receivedAt: msg.receivedAt,
           todoCount: extractResult.todos.length,

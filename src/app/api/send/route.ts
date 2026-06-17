@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
       subject,
       from: process.env.IMAP_USER || '',
       to,
-      body: mailBody.substring(0, 500),
+      body: mailBody,
       bodyHtml: bodyHtml || null,
       direction: 'out',
       isRead: true,

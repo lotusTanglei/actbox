@@ -5,6 +5,8 @@
 import { useState, useEffect, useCallback, Suspense } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
+import { EmailBody } from '@/components/EmailBody'
+import { emitRefresh } from '@/lib/refresh-bus'
 
 interface Message {
   id: number
@@ -35,9 +37,17 @@ function MailsContent() {
 
   const fetchMessages = useCallback(async () => {
     try {
-      const params = new URLSearchParams({ direction: 'in' })
+      const params = new URLSearchParams()
+      if (folder === 'drafts') {
+        params.set('direction', 'draft')
+      } else if (folder === 'sent') {
+        params.set('direction', 'out')
+      } else {
+        params.set('direction', 'in')
+        if (folder === 'unread') params.set('unread', 'true')
+        if (folder === 'starred') params.set('starred', 'true')
+      }
       if (search) params.set('search', search)
-      if (folder === 'starred') params.set('starred', 'true')
       const res = await fetch(`/api/messages?${params}`)
       const data = await res.json()
       if (res.ok) setMessages(data.messages)
@@ -63,6 +73,8 @@ function MailsContent() {
       if (res.ok) {
         setSelectedMessage(data.message)
         setMessages((prev) => prev.map((m) => m.id === msg.id ? { ...m, isRead: 1 } : m))
+        emitRefresh()
+        if (folder === 'unread') fetchMessages()
         const todoRes = await fetch('/api/todos?status=all')
         const todoData = await todoRes.json()
         if (todoData.todos) {
@@ -89,6 +101,7 @@ function MailsContent() {
     e.stopPropagation()
     await fetch(`/api/messages/${id}`, { method: 'DELETE' })
     setMessages((prev) => prev.filter((m) => m.id !== id))
+    emitRefresh()
     if (selectedId === id) {
       setSelectedId(null)
       setSelectedMessage(null)
@@ -113,13 +126,17 @@ function MailsContent() {
   const avatarColors = ['bg-orange-500', 'bg-red-500', 'bg-green-500', 'bg-blue-500', 'bg-purple-500', 'bg-pink-500', 'bg-teal-500']
   const getAvatarColor = (id: number) => avatarColors[id % avatarColors.length]
 
+  const folderLabel: Record<string, string> = {
+    inbox: '收件箱', unread: '未读', starred: '红旗', drafts: '草稿箱', sent: '已发送',
+  }
+
   return (
     <div className="flex h-full">
       {/* 中间栏：邮件列表 */}
       <div className="flex w-[340px] shrink-0 flex-col border-r border-border bg-card">
         <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
           <span className="text-sm font-medium text-foreground">
-            {messages.length > 0 ? `${messages.length} 封邮件` : '收件箱'}
+            {folderLabel[folder] || '收件箱'}{messages.length > 0 ? ` · ${messages.length}` : ''}
           </span>
           <input
             type="text"
@@ -241,14 +258,7 @@ function MailsContent() {
             )}
 
             <div className="flex-1 px-6 py-4">
-              {selectedMessage.bodyHtml ? (
-                <div
-                  className="prose prose-invert prose-sm max-w-none text-foreground [&_*]:text-foreground"
-                  dangerouslySetInnerHTML={{ __html: selectedMessage.bodyHtml }}
-                />
-              ) : (
-                <pre className="whitespace-pre-wrap font-sans text-sm text-foreground">{selectedMessage.body || '(无正文)'}</pre>
-              )}
+              <EmailBody html={selectedMessage.bodyHtml} text={selectedMessage.body} />
             </div>
           </div>
         ) : (

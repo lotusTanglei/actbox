@@ -5,6 +5,8 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { EmailBody } from '@/components/EmailBody'
+import { emitRefresh } from '@/lib/refresh-bus'
 
 interface Message {
   id: number
@@ -47,6 +49,7 @@ export default function MailDetailPage() {
         const data = await res.json()
         if (!res.ok) throw new Error(data.error)
         setMessage(data.message)
+        emitRefresh()
 
         // 获取关联待办
         const todoRes = await fetch(`/api/todos?status=all`)
@@ -174,16 +177,7 @@ export default function MailDetailPage() {
       )}
 
       {/* Body */}
-      <div className="rounded-lg border p-4">
-        {message.bodyHtml ? (
-          <div
-            className="prose prose-sm max-w-none"
-            dangerouslySetInnerHTML={{ __html: message.bodyHtml }}
-          />
-        ) : (
-          <pre className="whitespace-pre-wrap text-sm">{message.body || '(无正文)'}</pre>
-        )}
-      </div>
+      <EmailBody html={message.bodyHtml} text={message.body} />
     </main>
   )
 }

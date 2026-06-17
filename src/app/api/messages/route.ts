@@ -13,15 +13,23 @@ export async function GET(request: NextRequest) {
     const direction = searchParams.get('direction') || 'in' // in | out | draft
     const search = searchParams.get('search') // 关键词搜索
     const starred = searchParams.get('starred') // 'true' = 只看星标
+    const unread = searchParams.get('unread') // 'true' = 只看未读
 
     // 基础条件：不删除
     const conditions = [not(eq(messages.isDeleted, true))]
 
-    // 方向筛选
+    // 方向筛选（精确：out 仅已发送，draft 仅草稿）
     if (direction === 'in') {
       conditions.push(eq(messages.direction, 'in'))
     } else if (direction === 'out') {
-      conditions.push(or(eq(messages.direction, 'out'), eq(messages.direction, 'draft'))!)
+      conditions.push(eq(messages.direction, 'out'))
+    } else if (direction === 'draft') {
+      conditions.push(eq(messages.direction, 'draft'))
+    }
+
+    // 未读筛选
+    if (unread === 'true') {
+      conditions.push(eq(messages.isRead, false))
     }
 
     // 星标筛选

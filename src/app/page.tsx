@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { EmailInput } from '@/components/EmailInput'
+import { emitRefresh } from '@/lib/refresh-bus'
 
 export type TodoStatus = 'all' | 'pending' | 'done'
 
@@ -25,7 +26,7 @@ export interface Todo {
 
 export default function Home() {
   const [todos, setTodos] = useState<Todo[]>([])
-  const [statusFilter, setStatusFilter] = useState<TodoStatus>('pending')
+  const [statusFilter, setStatusFilter] = useState<TodoStatus>('all')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showInput, setShowInput] = useState(false)
@@ -57,6 +58,7 @@ export default function Home() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || `请求失败 (${res.status})`)
       await fetchTodos()
+      emitRefresh()
       setShowInput(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : '未知错误')
@@ -73,11 +75,13 @@ export default function Home() {
       body: JSON.stringify({ status: newStatus }),
     })
     await fetchTodos()
+    emitRefresh()
   }
 
   const handleDelete = async (id: number) => {
     await fetch(`/api/todos/${id}`, { method: 'DELETE' })
     await fetchTodos()
+    emitRefresh()
   }
 
   const pendingCount = todos.filter((t) => t.status === 'pending').length

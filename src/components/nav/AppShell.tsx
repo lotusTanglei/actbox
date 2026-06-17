@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Sidebar } from './Sidebar'
+import { onRefresh } from '@/lib/refresh-bus'
 
 interface AppShellProps {
   children: React.ReactNode
@@ -39,7 +40,12 @@ export function AppShell({ children }: AppShellProps) {
     loadCounts()
     // 定期刷新计数（每 60 秒）
     const interval = setInterval(loadCounts, 60000)
-    return () => clearInterval(interval)
+    // 订阅子页面触发的刷新（如勾选待办、标记已读后）
+    const unsub = onRefresh(loadCounts)
+    return () => {
+      clearInterval(interval)
+      unsub()
+    }
   }, [loadCounts, refreshKey])
 
   const handleRefresh = async () => {

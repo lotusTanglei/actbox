@@ -6,48 +6,17 @@ import { drizzle } from 'drizzle-orm/better-sqlite3'
 import * as schema from '@/lib/db/schema'
 import { todos, messages } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
+import { alignBaseline, migrate } from '@/lib/db/migrate-runner'
 
 // 用内存 SQLite 测试，不污染真实 DB
 let db: ReturnType<typeof drizzle>
 
 beforeAll(() => {
   const sqlite = Database(':memory:')
-  sqlite.exec(`
-    CREATE TABLE todos (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      title TEXT NOT NULL,
-      due_date TEXT,
-      priority TEXT,
-      context TEXT,
-      status TEXT NOT NULL DEFAULT 'pending',
-      source_message_id TEXT,
-      source_subject TEXT,
-      source_from TEXT,
-      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
-    );
-    CREATE TABLE messages (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      message_id TEXT NOT NULL UNIQUE,
-      subject TEXT,
-      sender TEXT,
-      recipient TEXT,
-      body TEXT,
-      body_html TEXT,
-      received_at INTEGER,
-      processed_at INTEGER NOT NULL DEFAULT (unixepoch()),
-      direction TEXT NOT NULL DEFAULT 'in' CHECK(direction IN ('in', 'out', 'draft')),
-      is_read INTEGER NOT NULL DEFAULT 0,
-      is_starred INTEGER NOT NULL DEFAULT 0,
-      is_deleted INTEGER NOT NULL DEFAULT 0,
-      todo_count INTEGER NOT NULL DEFAULT 0
-    );
-    CREATE TABLE settings (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
-    );
-  `)
   db = drizzle(sqlite, { schema })
+  // 用真实迁移建表，保证测试库 schema 始终与 schema.ts 一致（随 plan-01 扩列自动跟进）
+  alignBaseline(sqlite, { migrationsFolder: './drizzle' }) // 空库：no-op
+  migrate(db, { migrationsFolder: './drizzle' })
 })
 
 describe('Todos CRUD', () => {

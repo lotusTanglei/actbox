@@ -77,7 +77,7 @@
 
 阶段 0 · 地基
 
-- [ ] plan-01 数据模型 + 迁移（drizzle-kit / messages 扩列 / body 回填）
+- [x] plan-01 数据模型 + 迁移（drizzle-kit / messages 扩列 / body 回填）✅
 - [ ] plan-02 多账号 + MailAdapter（accounts / ImapAdapter / 账号 UI）
 - [ ] plan-17 一行启动 + 自启（端口 / launchd）
 

@@ -5,14 +5,20 @@ import { drizzle } from 'drizzle-orm/better-sqlite3'
 import * as schema from './schema'
 import path from 'path'
 import fs from 'fs'
+import { alignBaseline, migrate } from './migrate-runner'
 
 let _db: ReturnType<typeof drizzle> | null = null
 
-/** 获取 Drizzle 实例（单例） */
+/**
+ * 获取 Drizzle 实例（单例）。
+ * 首次创建时：对齐存量库基准 + 跑 drizzle migrate。
+ * - 空库：migrate 从零建出全表。
+ * - 存量旧库（从前的 autoCreateTables 建过表、无 drizzle 历史）：align 种 baseline，
+ *   migrate 跳过 0000、只跑增量（0001+），旧数据不丢。
+ */
 export function getDb() {
   if (_db) return _db
 
-  // 确保 data 目录存在
   const dataDir = path.join(process.cwd(), 'data')
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true })
@@ -20,66 +26,17 @@ export function getDb() {
 
   const dbPath = path.join(dataDir, 'actbox.db')
   const sqlite = new Database(dbPath)
-
-  // 启用 WAL 模式提升并发性能
   sqlite.pragma('journal_mode = WAL')
 
   _db = drizzle(sqlite, { schema })
 
-  // 自动建表（首次运行）
-  autoCreateTables(sqlite)
+  const migrationsFolder = path.join(process.cwd(), 'drizzle')
+  if (fs.existsSync(migrationsFolder)) {
+    alignBaseline(sqlite, { migrationsFolder })
+    migrate(_db, { migrationsFolder })
+  }
 
   return _db
-}
-
-/** 自动建表（首次运行） */
-function autoCreateTables(sqlite: Database.Database) {
-  const tableExists = sqlite
-    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='todos'")
-    .get()
-
-  if (!tableExists) {
-    sqlite.exec(`
-      CREATE TABLE IF NOT EXISTS todos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        due_date TEXT,
-        priority TEXT CHECK(priority IN ('high', 'medium', 'low')),
-        context TEXT,
-        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'done')),
-        source_message_id TEXT,
-        source_subject TEXT,
-        source_from TEXT,
-        created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-        updated_at INTEGER NOT NULL DEFAULT (unixepoch())
-      );
-
-      CREATE TABLE IF NOT EXISTS messages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        message_id TEXT NOT NULL UNIQUE,
-        subject TEXT,
-        sender TEXT,
-        recipient TEXT,
-        body TEXT,
-        body_html TEXT,
-        received_at INTEGER,
-        processed_at INTEGER NOT NULL DEFAULT (unixepoch()),
-        direction TEXT NOT NULL DEFAULT 'in' CHECK(direction IN ('in', 'out', 'draft')),
-        is_read INTEGER NOT NULL DEFAULT 0,
-        is_starred INTEGER NOT NULL DEFAULT 0,
-        is_deleted INTEGER NOT NULL DEFAULT 0,
-        todo_count INTEGER NOT NULL DEFAULT 0
-      );
-
-      CREATE TABLE IF NOT EXISTS settings (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_todos_status ON todos(status);
-      CREATE INDEX IF NOT EXISTS idx_messages_message_id ON messages(message_id);
-    `)
-  }
 }
 
 /** 重置 DB 实例（测试用） */

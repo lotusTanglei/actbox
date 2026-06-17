@@ -45,9 +45,16 @@ describe('schema 迁移 + 存量库基准对齐', () => {
 
   it('存量旧库（messages 已存在 + 一行数据）：align 种 baseline，migrate 不重建表、不丢数据', () => {
     const raw = new Database(dbPath)
-    raw.exec(
-      'CREATE TABLE messages (id INTEGER PRIMARY KEY, message_id TEXT, body TEXT, direction TEXT)',
-    )
+    // 模拟真实存量旧库（== 0000 baseline 的 schema，14 列）
+    raw.exec(`CREATE TABLE messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      message_id TEXT NOT NULL UNIQUE,
+      subject TEXT, sender TEXT, recipient TEXT, body TEXT, body_html TEXT,
+      received_at INTEGER, processed_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      direction TEXT NOT NULL DEFAULT 'in',
+      is_read INTEGER NOT NULL DEFAULT 0, is_starred INTEGER NOT NULL DEFAULT 0,
+      is_deleted INTEGER NOT NULL DEFAULT 0, todo_count INTEGER NOT NULL DEFAULT 0
+    )`)
     raw.exec(
       `INSERT INTO messages (message_id, body, direction) VALUES ('<m1>', '${'x'.repeat(300)}', 'in')`,
     )

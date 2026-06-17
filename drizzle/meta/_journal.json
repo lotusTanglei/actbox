@@ -15,6 +15,13 @@
       "when": 1781717324843,
       "tag": "0001_needy_jamie_braddock",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1781717842933,
+      "tag": "0002_loud_sabretooth",
+      "breakpoints": true
     }
   ]
 }

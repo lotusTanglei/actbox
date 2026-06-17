@@ -58,3 +58,27 @@ export const settings = sqliteTable('settings', {
   key: text('key').primaryKey(),
   value: text('value').notNull(),
 })
+
+/** 邮箱账号表（多账号）—— 凭据明文存（本地单机约束，无加密）。plan-02 Task 6 */
+export const accounts = sqliteTable('accounts', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  email: text('email').notNull().unique(),
+  provider: text('provider', { enum: ['163', '126', 'qq', 'gmail', 'outlook', 'custom'] }).notNull(),
+  protocol: text('protocol', { enum: ['imap', 'pop3'] }).notNull().default('imap'),
+  imapHost: text('imap_host'),
+  imapPort: integer('imap_port'),
+  smtpHost: text('smtp_host'),
+  smtpPort: integer('smtp_port'),
+  user: text('user').notNull(),
+  authCode: text('auth_code').notNull(), // 明文（本地约束）
+  oauthRefreshToken: text('oauth_refresh_token'),
+  displayName: text('display_name'),
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  syncMode: text('sync_mode', { enum: ['idle', 'poll'] }).notNull().default('idle'),
+  lastSyncedAt: integer('last_synced_at', { mode: 'timestamp' }),
+  syncStatus: text('sync_status', { enum: ['healthy', 'syncing', 'error', 'disabled'] }).notNull().default('healthy'),
+  syncError: text('sync_error'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+}, (t) => ({
+  activeIdx: index('idx_accounts_active').on(t.isActive),
+}))

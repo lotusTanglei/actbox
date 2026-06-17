@@ -11,7 +11,10 @@
     "test:watch": "vitest",
     "test:golden": "dotenv -e .env.local -v RUN_GOLDEN_TESTS=true -- vitest run src/__tests__/extractor/golden.test.ts",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "db:backfill": "tsx scripts/backfill.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
@@ -61,6 +64,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
     "tailwindcss": "^4",
+    "tsx": "^4.22.4",
     "typescript": "^5",
     "vitest": "^4.1.8"
   }

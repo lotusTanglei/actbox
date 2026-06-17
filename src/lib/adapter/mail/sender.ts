@@ -30,6 +30,7 @@ export class MailSender {
     to: string
     subject: string
     body: string
+    bodyHtml?: string
     replyToMessageId?: string
   }): Promise<{ messageId: string }> {
     if (!this.config.user || !this.config.authCode) {
@@ -51,6 +52,7 @@ export class MailSender {
       to: params.to,
       subject: params.subject,
       text: params.body,
+      html: params.bodyHtml,
       headers: params.replyToMessageId
         ? { 'In-Reply-To': params.replyToMessageId, References: params.replyToMessageId }
         : undefined,

@@ -9,16 +9,16 @@ import { messages } from '@/lib/db/schema'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { to, subject, body: mailBody, replyToMessageId } = body
+    const { to, subject, body: mailBody, bodyHtml, replyToMessageId } = body
 
     if (!to || !subject || !mailBody) {
       return NextResponse.json({ error: 'Missing to, subject, or body' }, { status: 400 })
     }
 
     const sender = new MailSender()
-    const result = await sender.send({ to, subject, body: mailBody, replyToMessageId })
+    const result = await sender.send({ to, subject, body: mailBody, bodyHtml, replyToMessageId })
 
-    // 记录到已发送
+    // 记录到已发送（含 HTML 正文）
     const db = getDb()
     db.insert(messages).values({
       messageId: result.messageId,
@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
       from: process.env.IMAP_USER || '',
       to,
       body: mailBody.substring(0, 500),
+      bodyHtml: bodyHtml || null,
       direction: 'out',
       isRead: true,
     }).run()

@@ -26,7 +26,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { to, subject, body: mailBody } = body
+    const { to, subject, body: mailBody, bodyHtml } = body
 
     const db = getDb()
     const result = db.insert(messages).values({
@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
       from: process.env.IMAP_USER || '',
       to: to || '',
       body: mailBody || '',
+      bodyHtml: bodyHtml || null,
       direction: 'draft',
       isRead: true,
     }).returning().all()

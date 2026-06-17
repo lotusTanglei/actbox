@@ -3,9 +3,10 @@
 'use client'
 
 import { useState } from 'react'
-import { Textarea } from '@/components/ui/textarea'
+import { htmlToText } from 'html-to-text'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { RichTextEditor } from '@/components/RichTextEditor'
 
 interface ComposeMailProps {
   /** 预填收件人 */
@@ -26,6 +27,19 @@ interface ComposeMailProps {
   onCancel?: () => void
 }
 
+/** 纯文本（AI 起草结果）转 HTML 段落，便于塞进富文本编辑器 */
+function plainTextToHtml(text: string): string {
+  return text
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map(
+      (p) =>
+        `<p>${p.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</p>`,
+    )
+    .join('')
+}
+
 export function ComposeMail({
   to: initialTo = '',
   subject: initialSubject = '',
@@ -43,8 +57,11 @@ export function ComposeMail({
   const [drafting, setDrafting] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
 
+  // 正文纯文本（用于校验/摘要/不支持 HTML 的客户端）；body 本身是 HTML
+  const plainBody = htmlToText(body).trim()
+
   const handleSend = async () => {
-    if (!to || !subject || !body) return
+    if (!to || !subject || !plainBody) return
     setSending(true)
     setMessage(null)
 
@@ -52,7 +69,7 @@ export function ComposeMail({
       const res = await fetch('/api/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to, subject, body, replyToMessageId }),
+        body: JSON.stringify({ to, subject, body: plainBody, bodyHtml: body, replyToMessageId }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
@@ -73,7 +90,7 @@ export function ComposeMail({
       const res = await fetch('/api/draft', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to, subject, body }),
+        body: JSON.stringify({ to, subject, body: plainBody, bodyHtml: body }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
@@ -102,7 +119,7 @@ export function ComposeMail({
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      setBody(data.draft)
+      setBody(plainTextToHtml(data.draft))
       setMessage('🤖 AI 草稿已生成，请审阅后发送')
     } catch (err) {
       setMessage(`❌ ${err instanceof Error ? err.message : 'AI 起草失败'}`)
@@ -139,13 +156,7 @@ export function ComposeMail({
         </div>
         <div>
           <label className="mb-1 block text-xs text-muted-foreground">正文</label>
-          <Textarea
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            rows={10}
-            className="font-mono text-sm"
-            placeholder="邮件正文..."
-          />
+          <RichTextEditor value={body} onChange={setBody} />
         </div>
 
         {message && (
@@ -155,7 +166,7 @@ export function ComposeMail({
         <div className="flex gap-2">
           <Button
             onClick={handleSend}
-            disabled={sending || !to || !subject || !body}
+            disabled={sending || !to || !subject || !plainBody}
             className="flex-1"
           >
             {sending ? '⏳ 发送中...' : '📤 发送'}

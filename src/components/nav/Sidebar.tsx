@@ -282,13 +282,21 @@ export function Sidebar({ unreadCount = 0, todoPendingCount = 0, onSearch, onRef
         )}
       </div>
 
-      {/* 底部：写邮件 + 设置 */}
+      {/* 底部：写邮件 + 通讯录 + 设置 */}
       <div className="space-y-1 border-t border-border p-2">
         <Link
           href="/compose"
           className="flex items-center justify-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
         >
           ✏️ 写邮件
+        </Link>
+        <Link
+          href="/contacts"
+          className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${
+            isActive('/contacts') ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+          }`}
+        >
+          👥 通讯录
         </Link>
         <Link
           href="/settings"

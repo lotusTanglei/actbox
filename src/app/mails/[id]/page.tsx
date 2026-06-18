@@ -55,6 +55,55 @@ interface Todo {
   context: string | null
 }
 
+/** 发件人旁的"加入通讯录"/"查看名片"按钮 */
+function SenderContactButton({ from }: { from: string | null }) {
+  const [contacts, setContacts] = useState<{ id: number; name: string; email: string }[]>([])
+  const [added, setAdded] = useState(false)
+
+  // 解析 from 获取 email
+  const email = from?.match(/<([^>]+)>/)?.[1] || from?.trim() || ''
+  const name = from?.replace(/\s*<[^>]+>\s*/, '').trim() || ''
+  const isValidEmail = /^[\w.+-]+@[\w.-]+$/.test(email)
+
+  useEffect(() => {
+    if (!isValidEmail) return
+    fetch(`/api/contacts/autocomplete?q=${encodeURIComponent(email)}`)
+      .then(r => r.json())
+      .then(d => {
+        const found = (d.hits || []).filter((h: any) => h.inAddressBook && h.email.toLowerCase() === email.toLowerCase())
+        setContacts(found)
+      })
+      .catch(() => {})
+  }, [email, isValidEmail])
+
+  if (!isValidEmail) return null
+
+  const existing = contacts[0]
+
+  const handleAdd = async () => {
+    const r = await fetch('/api/contacts', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accountId: 1, name: name || email, email }),
+    })
+    if (r.ok) setAdded(true)
+  }
+
+  if (existing) {
+    return (
+      <Link href={`/contacts/${existing.id}`} className="text-xs text-primary hover:underline">
+        📇 {existing.name}
+      </Link>
+    )
+  }
+
+  return (
+    <button onClick={handleAdd} disabled={added}
+      className="rounded border px-1.5 py-0.5 text-xs transition-colors hover:bg-accent disabled:opacity-50">
+      {added ? '✅ 已加入' : '+ 通讯录'}
+    </button>
+  )
+}
+
 export default function MailDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -176,8 +225,10 @@ export default function MailDetailPage() {
       {/* Subject */}
       <div>
         <h1 className="text-xl font-bold">{message.subject || '(无主题)'}</h1>
-        <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
+        <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
           <span>发件人: {message.from || '未知'}</span>
+          {/* 加入通讯录 / 查看名片 */}
+          <SenderContactButton from={message.from} />
           {message.to && <span>收件人: {message.to}</span>}
           <span>
             {message.receivedAt

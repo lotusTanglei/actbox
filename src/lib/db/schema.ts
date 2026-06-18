@@ -140,3 +140,30 @@ export const messageLabels = sqliteTable('message_labels', {
   pk: primaryKey({ columns: [t.messageId, t.labelId] }),
   labelIdx: index('idx_message_labels_label').on(t.labelId),
 }))
+
+/** 联系人分组/邮件组（按账号隔离） */
+export const contactsGroups = sqliteTable('contacts_groups', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  accountId: integer('account_id').notNull(),
+  name: text('name').notNull(),
+}, (t) => ({
+  accNameUq: uniqueIndex('uq_contacts_groups_account_name').on(t.accountId, t.name),
+}))
+
+/** 联系人（按账号隔离，email 在账号内唯一） */
+export const contacts = sqliteTable('contacts', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  accountId: integer('account_id').notNull(),
+  name: text('name').notNull(),
+  email: text('email').notNull(),
+  phone: text('phone'),
+  note: text('note'),
+  avatarPath: text('avatar_path'),
+  groupId: integer('group_id'),
+  contactCount: integer('contact_count').notNull().default(0),
+  lastContactedAt: integer('last_contacted_at', { mode: 'timestamp' }),
+}, (t) => ({
+  accEmailUq: uniqueIndex('uq_contacts_account_email').on(t.accountId, t.email),
+  accNameIdx: index('idx_contacts_account_name').on(t.accountId, t.name),
+  accGroupIdx: index('idx_contacts_account_group').on(t.accountId, t.groupId),
+}))

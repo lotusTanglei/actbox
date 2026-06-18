@@ -6,7 +6,30 @@ import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { EmailBody } from '@/components/EmailBody'
+import { AttachmentList } from '@/components/AttachmentList'
 import { emitRefresh } from '@/lib/refresh-bus'
+
+interface AttachmentLite {
+  id: number
+  contentId: string | null
+}
+
+/** 把 bodyHtml 中的 cid:xxx 替换为内联附件 serve URL(渲染时解析内联图片)。 */
+function rewriteCidImages(html: string | null, messageId: number, attachments: AttachmentLite[]): string | null {
+  if (!html) return html
+  const cidMap: Record<string, number> = {}
+  for (const a of attachments) {
+    if (a.contentId) {
+      const stripped = a.contentId.replace(/^<|>$/g, '')
+      if (stripped) cidMap[stripped] = a.id
+    }
+  }
+  if (!Object.keys(cidMap).length) return html
+  return html.replace(/cid:([^"'\s)>]+)/gi, (m, cid: string) => {
+    const aid = cidMap[cid]
+    return aid ? `/api/messages/${messageId}/attachments/${aid}?inline=1` : m
+  })
+}
 
 interface Message {
   id: number
@@ -39,6 +62,7 @@ export default function MailDetailPage() {
 
   const [message, setMessage] = useState<Message | null>(null)
   const [todos, setTodos] = useState<Todo[]>([])
+  const [attachments, setAttachments] = useState<AttachmentLite[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -50,6 +74,12 @@ export default function MailDetailPage() {
         if (!res.ok) throw new Error(data.error)
         setMessage(data.message)
         emitRefresh()
+
+        // 拉附件(列表 + 内联 cid 渲染)
+        fetch(`/api/messages/${id}/attachments`)
+          .then((r) => r.json())
+          .then((d) => setAttachments(d.attachments || []))
+          .catch(() => {})
 
         // 获取关联待办
         const todoRes = await fetch(`/api/todos?status=all`)
@@ -177,7 +207,10 @@ export default function MailDetailPage() {
       )}
 
       {/* Body */}
-      <EmailBody html={message.bodyHtml} text={message.body} />
+      <EmailBody html={rewriteCidImages(message.bodyHtml, message.id, attachments)} text={message.body} />
+
+      {/* Attachments */}
+      <AttachmentList messageId={message.id} />
     </main>
   )
 }

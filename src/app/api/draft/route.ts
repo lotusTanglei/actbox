@@ -22,11 +22,11 @@ export async function GET() {
   }
 }
 
-/** POST /api/draft — 保存草稿 */
+/** POST /api/draft — 创建草稿(direction='draft'),返回 id。plan-05 Task 6 */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { to, subject, body: mailBody, bodyHtml } = body
+    const { to, cc, bcc, subject, body: mailBody, bodyHtml, accountId } = body
 
     const db = getDb()
     const result = db.insert(messages).values({
@@ -34,13 +34,16 @@ export async function POST(request: NextRequest) {
       subject: subject || '(无主题)',
       from: process.env.IMAP_USER || '',
       to: to || '',
+      cc: cc || null,
+      bcc: bcc || null,
       body: mailBody || '',
       bodyHtml: bodyHtml || null,
       direction: 'draft',
       isRead: true,
+      accountId: typeof accountId === 'number' ? accountId : null,
     }).returning().all()
 
-    return NextResponse.json({ draft: result[0] }, { status: 201 })
+    return NextResponse.json({ id: result[0].id, draft: result[0] }, { status: 201 })
   } catch (error) {
     console.error('[/api/draft POST] Error:', error)
     return NextResponse.json({ error: 'Failed to save draft' }, { status: 500 })

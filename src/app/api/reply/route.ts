@@ -1,7 +1,9 @@
 // src/app/api/reply/route.ts
 
 import { NextRequest, NextResponse } from 'next/server'
+import { getDb } from '@/lib/db'
 import { getLlmClient, getModelName } from '@/lib/llm/client'
+import { getLlmConfig } from '@/lib/llm/config'
 
 const REPLY_SYSTEM_PROMPT = `你是一个专业的邮件回复助手。根据原始邮件内容，起草一封合适的回复。
 
@@ -30,6 +32,7 @@ export async function POST(request: NextRequest) {
 
     const client = getLlmClient()
     const model = getModelName()
+    const cfg = getLlmConfig(getDb())
 
     let userPrompt = `原始邮件主题：${originalSubject || '(无主题)'}\n\n原始邮件内容：\n${originalBody}`
     if (todoContext) {
@@ -42,7 +45,7 @@ export async function POST(request: NextRequest) {
         { role: 'system', content: REPLY_SYSTEM_PROMPT },
         { role: 'user', content: userPrompt },
       ],
-      temperature: 0.3,
+      temperature: cfg.temperature,
     })
 
     const draft = response.choices[0]?.message?.content || ''

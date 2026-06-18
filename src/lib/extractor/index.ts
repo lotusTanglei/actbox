@@ -1,6 +1,7 @@
 // src/lib/extractor/index.ts
 
 import { getLlmClient, getModelName } from '@/lib/llm/client'
+import { getLlmConfig } from '@/lib/llm/config'
 import { getSystemPrompt } from './prompt'
 import type { ExtractResult, ExtractedTodo, LlmExtractionResponse } from './types'
 
@@ -10,8 +11,9 @@ import type { ExtractResult, ExtractedTodo, LlmExtractionResponse } from './type
  * @returns 抽取结果
  */
 export async function extractTodos(emailBody: string): Promise<ExtractResult> {
-  const client = getLlmClient()
-  const model = getModelName()
+  const client = getLlmClient('extract')
+  const model = getModelName('extract')
+  const cfg = getLlmConfig()
 
   const response = await client.chat.completions.create({
     model,
@@ -19,7 +21,7 @@ export async function extractTodos(emailBody: string): Promise<ExtractResult> {
       { role: 'system', content: getSystemPrompt() },
       { role: 'user', content: emailBody },
     ],
-    temperature: 0.1, // 低温度，稳定输出
+    temperature: cfg.capabilities?.extract?.temperature ?? cfg.temperature,
     response_format: { type: 'json_object' },
   })
 

@@ -1,7 +1,9 @@
 // src/app/api/polish/route.ts
 
 import { NextRequest, NextResponse } from 'next/server'
+import { getDb } from '@/lib/db'
 import { getLlmClient, getModelName } from '@/lib/llm/client'
+import { getLlmConfig } from '@/lib/llm/config'
 import {
   buildPolishPrompt,
   POLISH_ACTIONS,
@@ -32,9 +34,10 @@ export async function POST(request: NextRequest) {
     const { system, temperature } = buildPolishPrompt(action, instruction)
     const client = getLlmClient()
     const model = getModelName()
+    const cfg = getLlmConfig(getDb())
 
     const response = await client.chat.completions.create({
-      model,
+      model: model || cfg.model,
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: input },

@@ -1,16 +1,16 @@
 // src/app/api/summarize/route.ts
 import { NextResponse } from 'next/server'
-import { getDb } from '@/lib/db'
+import { getRawDb } from '@/lib/db'
 import { getLlmClient, getModelName } from '@/lib/llm/client'
 import { buildSummarizePrompt, SUMMARIZE_MAX_CHARS } from '@/lib/llm/prompts/summarize'
 
 export async function POST(req: Request) {
   const body = await req.json()
-  const db = getDb()
   let subject = body.subject, from = body.from, text = body.body as string | undefined
 
   if (body.messageId) {
-    const m = db.prepare('SELECT sender, subject, body FROM messages WHERE id = ?').get(Number(body.messageId)) as any
+    const rawDb = getRawDb()
+    const m = rawDb.prepare('SELECT sender, subject, body FROM messages WHERE id = ?').get(Number(body.messageId)) as any
     if (!m) return NextResponse.json({ error: 'message not found' }, { status: 404 })
     subject = m.subject; from = m.sender; text = m.body
   }

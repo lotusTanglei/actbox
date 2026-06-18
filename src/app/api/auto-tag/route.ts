@@ -1,16 +1,15 @@
 // src/app/api/auto-tag/route.ts
 import { NextResponse } from 'next/server'
-import { getDb } from '@/lib/db'
+import { getRawDb } from '@/lib/db'
 import { getLlmClient, getModelName } from '@/lib/llm/client'
 import { buildAutoTagPrompt, parseAutoTagResult } from '@/lib/llm/prompts/auto-tag'
 
 export async function POST(req: Request) {
   const body = await req.json()
-  const db = getDb()
   let subject = body.subject, from = body.from, text = body.body as string | undefined
 
   if (body.messageId) {
-    const m = db.prepare('SELECT sender, subject, body FROM messages WHERE id = ?').get(Number(body.messageId)) as any
+    const m = getRawDb().prepare('SELECT sender, subject, body FROM messages WHERE id = ?').get(Number(body.messageId)) as any
     if (!m) return NextResponse.json({ error: 'message not found' }, { status: 404 })
     subject = m.subject; from = m.sender; text = m.body
   }
@@ -19,7 +18,7 @@ export async function POST(req: Request) {
   // 查既有标签供 prompt
   let availableLabels: string[] = []
   try {
-    const labels = db.prepare('SELECT name FROM labels').all() as any[]
+    const labels = getRawDb().prepare('SELECT name FROM labels').all() as any[]
     availableLabels = labels.map((l: any) => l.name)
   } catch { /* labels 表可能不存在 */ }
 

@@ -76,6 +76,7 @@ function MailsContent() {
         if (folder === 'unread') params.set('unread', 'true')
         if (folder === 'starred') params.set('starred', 'true')
         if (folder === 'snoozed') params.set('snoozed', 'true')
+        if (folder === 'spam') params.set('spam', 'true')
       }
       if (search) params.set('search', search)
       if (labelId) params.set('labelId', labelId)
@@ -216,7 +217,7 @@ function MailsContent() {
   const getAvatarColor = (id: number) => avatarColors[id % avatarColors.length]
 
   const folderLabel: Record<string, string> = {
-    inbox: '收件箱', unread: '未读', starred: '红旗', drafts: '草稿箱', sent: '已发送', snoozed: '已延后',
+    inbox: '收件箱', unread: '未读', starred: '红旗', drafts: '草稿箱', sent: '已发送', snoozed: '已延后', spam: '垃圾邮件',
   }
 
   return (

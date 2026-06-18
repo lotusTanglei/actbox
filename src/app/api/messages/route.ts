@@ -37,6 +37,7 @@ export async function GET(request: NextRequest) {
     const unread = searchParams.get('unread') // 'true' = 只看未读
     const labelId = searchParams.get('labelId') // 按标签过滤
     const showSnoozed = searchParams.get('snoozed') // 'true' = 显示已延后邮件
+    const spam = searchParams.get('spam') // 'true' = 只看垃圾邮件
     const threadGroup = searchParams.get('thread') // 'group' = 按会话折叠
     const threadId = searchParams.get('threadId') // 展开特定会话
 
@@ -137,6 +138,11 @@ export async function GET(request: NextRequest) {
     // 星标筛选
     if (starred === 'true') {
       conditions.push(eq(messages.isStarred, true))
+    }
+
+    // 垃圾邮件筛选
+    if (spam === 'true') {
+      conditions.push(eq(messages.isSpam, true))
     }
 
     // 搜索

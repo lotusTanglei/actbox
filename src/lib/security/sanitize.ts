@@ -1,15 +1,15 @@
 // src/lib/security/sanitize.ts — DOMPurify email HTML sanitization (XSS)。plan-11 Task 1。
 import DOMPurify from 'dompurify'
 
-let purifyInstance: DOMPurify.DOMPurifyI | null = null
+let purifyInstance: any = null
 
-function getPurify(): DOMPurify.DOMPurifyI {
+function getPurify(): any {
   if (purifyInstance) return purifyInstance
   let win: any
   if (typeof window !== 'undefined') {
     win = window
   } else {
-    const { JSDOM } = require('jsdom') as typeof import('jsdom')
+    const { JSDOM } = require('jsdom')
     win = new JSDOM('', { url: 'http://localhost/' }).window
   }
   const purify = DOMPurify(win)
@@ -18,7 +18,8 @@ function getPurify(): DOMPurify.DOMPurifyI {
       const href = (node.getAttribute('href') || '').trim().toLowerCase()
       if (href.startsWith('javascript:') || href.startsWith('vbscript:') || href.startsWith('data:text/html')) node.removeAttribute('href')
     }
-    for (const attr of Array.from(node.attributes || [])) { if (/^on/i.test(attr.name)) node.removeAttribute(attr.name) }
+    const attrs = node.attributes ? Array.from(node.attributes) as any[] : []
+    for (const attr of attrs) { if (/^on/i.test(attr.name)) node.removeAttribute(attr.name) }
     const style = node.getAttribute('style')
     if (style && /(expression\s*\(|javascript:|vbscript:)/i.test(style)) node.removeAttribute('style')
   })
@@ -26,7 +27,7 @@ function getPurify(): DOMPurify.DOMPurifyI {
   return purify
 }
 
-const SANITIZE_CONFIG: DOMPurify.Config = {
+const SANITIZE_CONFIG: any = {
   ALLOWED_TAGS: ['a','p','br','img','table','thead','tbody','tr','td','th','ul','ol','li','span','div','h1','h2','h3','h4','h5','h6','strong','em','b','i','u','blockquote','pre','hr','font','center','colgroup','col','caption','sub','sup','dl','dt','dd'],
   ALLOWED_ATTR: ['href','src','alt','title','width','height','style','align','valign','bgcolor','color','colspan','rowspan','target','rel','class','id','cid'],
   ALLOW_DATA_ATTR: false,

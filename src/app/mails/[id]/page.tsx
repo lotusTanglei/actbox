@@ -43,6 +43,10 @@ interface Message {
   direction: string
   isRead: number
   isStarred: number
+  isSpam: number
+  isExternal: number
+  authResult: string | null
+  spamScore: number | null
   todoCount: number
 }
 
@@ -227,16 +231,21 @@ export default function MailDetailPage() {
         <h1 className="text-xl font-bold">{message.subject || '(无主题)'}</h1>
         <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
           <span>发件人: {message.from || '未知'}</span>
-          {/* 加入通讯录 / 查看名片 */}
           <SenderContactButton from={message.from} />
           {message.to && <span>收件人: {message.to}</span>}
-          <span>
-            {message.receivedAt
-              ? new Date(message.receivedAt).toLocaleString('zh-CN')
-              : ''}
-          </span>
+          <span>{message.receivedAt ? new Date(message.receivedAt).toLocaleString('zh-CN') : ''}</span>
         </div>
       </div>
+
+      {/* 安全横幅 plan-11 Task 10 */}
+      {message.authResult && (() => { try { const a = JSON.parse(message.authResult); return (a.spf === 'fail' || a.dkim === 'fail' || a.dmarc === 'fail') ? <div className="rounded border border-red-400/50 bg-red-400/10 px-3 py-1.5 text-xs text-red-600">⚠️ 认证失败：SPF={a.spf} DKIM={a.dkim} DMARC={a.dmarc}，发件人可能被伪造</div> : null } catch { return null } })()}
+      {message.isExternal === 1 && <div className="rounded border border-yellow-400/50 bg-yellow-400/10 px-3 py-1.5 text-xs">⚠️ 这是一封来自组织外部的邮件，请警惕钓鱼/社工</div>}
+      {message.isSpam === 1 && <div className="rounded border border-red-400/50 bg-red-400/10 px-3 py-1.5 text-xs text-red-600">🚫 此邮件已被标记为垃圾（评分 {message.spamScore?.toFixed(1)}）</div>}
+
+      {/* 认证徽标 */}
+      {message.authResult && (() => { try { const a = JSON.parse(message.authResult); return <div className="flex gap-2 text-[10px]">{(['spf','dkim','dmarc'] as const).map(k => <span key={k} className={`rounded px-1.5 py-0.5 ${a[k]==='pass'?'bg-green-100 text-green-700':a[k]==='fail'?'bg-red-100 text-red-700':'bg-gray-100 text-gray-500'}`}>{k.toUpperCase()}:{a[k]}</span>)}</div> } catch { return null } })()}
+      {message.isSpam === 1 && <div className="flex gap-1"><button onClick={async () => { await fetch(`/api/messages/${message.id}/spam`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'unmark' }) }); window.location.reload() }} className="rounded border px-2 py-0.5 text-xs">不是垃圾</button></div>}
+      {message.isSpam !== 1 && <div className="flex gap-1"><button onClick={async () => { await fetch(`/api/messages/${message.id}/spam`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'mark' }) }); window.location.reload() }} className="rounded border px-2 py-0.5 text-xs">标记垃圾</button></div>}
 
       {/* Related Todos */}
       {todos.length > 0 && (

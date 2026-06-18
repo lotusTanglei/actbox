@@ -33,6 +33,13 @@ interface FolderLite {
   totalCount: number
 }
 
+interface LabelLite {
+  id: number
+  name: string
+  color: string
+  parentId: number | null
+}
+
 const SYSTEM_FOLDERS: { type: FolderLite['type']; label: string; icon: string; param: string }[] = [
   { type: 'inbox', label: '收件箱', icon: '📥', param: 'inbox' },
   { type: 'sent', label: '已发送', icon: '📤', param: 'sent' },
@@ -59,6 +66,7 @@ export function Sidebar({ unreadCount = 0, todoPendingCount = 0, onSearch, onRef
   const [collapsedFolders, setCollapsedFolders] = useState(false)
   const [accounts, setAccounts] = useState<AccountLite[]>([])
   const [folders, setFolders] = useState<FolderLite[]>([])
+  const [labels, setLabels] = useState<LabelLite[]>([])
 
   // 按 type 聚合未读(多账号合并)
   const unreadByType = folders.reduce<Record<string, number>>((acc, f) => {
@@ -68,12 +76,20 @@ export function Sidebar({ unreadCount = 0, todoPendingCount = 0, onSearch, onRef
 
   const loadAccounts = async () => {
     try {
-      const [accRes, folderRes] = await Promise.all([fetch('/api/accounts'), fetch('/api/folders')])
+      const [accRes, folderRes, labelsRes] = await Promise.all([
+        fetch('/api/accounts'),
+        fetch('/api/folders'),
+        fetch('/api/labels?accountId=1'),
+      ])
       const accData = await accRes.json()
       setAccounts((accData.accounts || []).filter((a: AccountLite) => a.isActive))
       if (folderRes.ok) {
         const folderData = await folderRes.json()
         setFolders(folderData.folders || [])
+      }
+      if (labelsRes.ok) {
+        const labelsData = await labelsRes.json()
+        setLabels(labelsData.labels || [])
       }
     } catch {
       // 静默
@@ -182,6 +198,10 @@ export function Sidebar({ unreadCount = 0, todoPendingCount = 0, onSearch, onRef
               <span className="ml-4">📤 已发送</span>
             </Link>
 
+            <Link href="/mails?folder=snoozed" className="flex items-center rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground">
+              <span className="ml-4">⏰ 已延后</span>
+            </Link>
+
             {SYSTEM_FOLDERS.filter((f) => ['archive', 'trash', 'spam'].includes(f.type)).map((f) => (
               <Link
                 key={f.type}
@@ -233,6 +253,33 @@ export function Sidebar({ unreadCount = 0, todoPendingCount = 0, onSearch, onRef
 
         {/* Saved Search(常驻)—— plan-07 Task 8 */}
         <SavedSearches />
+
+        {/* 标签区 —— plan-08 Task 12 */}
+        {labels.length > 0 && (
+          <div className="mt-4">
+            <div className="mb-1 flex items-center justify-between px-2 py-1">
+              <span className="text-xs font-medium text-muted-foreground">标签</span>
+            </div>
+            <div className="space-y-0.5">
+              {labels.map((l) => (
+                <Link
+                  key={l.id}
+                  href={`/mails?labelId=${l.id}`}
+                  className={`flex items-center gap-2 rounded-md px-2 py-1 text-sm transition-colors hover:bg-accent/50 ${
+                    pathname === '/mails' ? 'text-muted-foreground hover:text-foreground' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  style={l.parentId ? { paddingLeft: 28 } : undefined}
+                >
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: l.color }}
+                  />
+                  <span className="flex-1 truncate">{l.name}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 底部：写邮件 + 设置 */}

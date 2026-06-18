@@ -1,45 +1,49 @@
-// src/lib/llm/client.ts
-
+// src/lib/llm/client.ts — DB-first LLM client (per-capability model + provider|baseUrl cache)。plan-12 Task 1。
 import OpenAI from 'openai'
-import { PROVIDERS, type ProviderName } from './providers'
+import { getLlmConfig } from './config'
+import { PROVIDERS, resolveProviderName, type ProviderName } from './providers'
 
-let _client: OpenAI | null = null
-let _currentProvider: string | null = null
+export type LlmCapability = 'summarize' | 'polish' | 'classify' | 'extract' | 'reply'
 
-/** 获取或创建 OpenAI 兼容客户端（单例，按 provider 切换） */
-export function getLlmClient(providerName?: ProviderName): OpenAI {
-  const provider = providerName || (process.env.LLM_PROVIDER as ProviderName) || 'deepseek'
-  const config = PROVIDERS[provider]
+const _clientCache = new Map<string, OpenAI>()
 
-  if (!config) {
-    throw new Error(
-      `Unknown LLM provider: ${provider}. Supported: ${Object.keys(PROVIDERS).join(', ')}`
-    )
-  }
-
-  // 如果 provider 没变，复用现有客户端
-  if (_client && _currentProvider === provider) {
-    return _client
-  }
-
-  const apiKey = process.env[config.apiKeyEnvVar]
-  if (!apiKey) {
-    throw new Error(`Missing API key: set ${config.apiKeyEnvVar} in .env.local`)
-  }
-
-  _client = new OpenAI({
-    apiKey,
-    baseURL: process.env[config.baseUrlEnvVar] || config.defaults.baseUrl,
-  })
-
-  _currentProvider = provider
-
-  return _client
+function cacheKey(provider: string, baseUrl: string): string {
+  return `${provider}|${baseUrl}`
 }
 
-/** 获取当前 provider 的模型名 */
-export function getModelName(providerName?: ProviderName): string {
-  const provider = providerName || (process.env.LLM_PROVIDER as ProviderName) || 'deepseek'
-  const config = PROVIDERS[provider]
-  return process.env[config.modelEnvVar] || config.defaults.model
+/**
+ * 获取或创建 OpenAI 兼容客户端（按 provider+baseUrl 单例缓存）。
+ * 配置 DB-first（getLlmConfig 读 settings），env 作 fallback。
+ * 签名向后兼容：capability 和 db 均可选。
+ */
+export function getLlmClient(capability?: LlmCapability, db?: any): OpenAI {
+  const cfg = getLlmConfig(db)
+  const key = cacheKey(cfg.provider, cfg.baseUrl)
+  const cached = _clientCache.get(key)
+  if (cached) return cached
+  if (!cfg.apiKey) {
+    throw new Error('Missing API key: 请在设置页 LLM tab 配置 LLM API Key(或在 .env.local 设 DEEPSEEK_API_KEY/QWEN_API_KEY/ZHIPU_API_KEY)')
+  }
+  const client = new OpenAI({ apiKey: cfg.apiKey, baseURL: cfg.baseUrl })
+  _clientCache.set(key, client)
+  return client
+}
+
+/** 清空客户端缓存（改配置后或测试隔离用） */
+export function __resetLlmClientCache(): void {
+  _clientCache.clear()
+}
+
+/**
+ * 取当前模型名。capability 命中覆盖模型则用覆盖,否则用顶层默认模型。
+ * 签名向后兼容：capability 和 db 均可选。
+ */
+export function getModelName(capability?: LlmCapability, db?: any): string {
+  const cfg = getLlmConfig(db)
+  const provider = resolveProviderName(cfg.provider)
+  const fallback = cfg.model || PROVIDERS[provider].defaults.model
+  if (capability && cfg.capabilities?.[capability]?.model) {
+    return cfg.capabilities[capability].model!
+  }
+  return fallback
 }

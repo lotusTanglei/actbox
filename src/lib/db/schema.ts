@@ -1,6 +1,6 @@
 // src/lib/db/schema.ts
 
-import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, index, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 /** 待办表 */
 export const todos = sqliteTable('todos', {
@@ -81,4 +81,17 @@ export const accounts = sqliteTable('accounts', {
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 }, (t) => ({
   activeIdx: index('idx_accounts_active').on(t.isActive),
+}))
+
+/** 邮箱文件夹表(服务器文件夹映射 + 角标)—— plan-03 Task 1 */
+export const folders = sqliteTable('folders', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  accountId: integer('account_id').notNull(),
+  path: text('path').notNull(), // IMAP 服务器路径,如 'INBOX' / '[Gmail]/Sent Mail'
+  displayName: text('display_name').notNull(),
+  type: text('type', { enum: ['inbox', 'sent', 'drafts', 'trash', 'spam', 'archive', 'custom'] }).notNull().default('custom'),
+  unreadCount: integer('unread_count').notNull().default(0),
+  totalCount: integer('total_count').notNull().default(0),
+}, (t) => ({
+  accPathUq: uniqueIndex('uq_folders_account_path').on(t.accountId, t.path),
 }))

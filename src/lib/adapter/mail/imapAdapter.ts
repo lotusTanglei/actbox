@@ -54,28 +54,34 @@ export class ImapAdapter implements MailAdapter {
       const list = ((await client.list()) as any[]) || []
       return list
         .filter((b) => !(b.flags && Array.from(b.flags).includes('\\Noselect')))
-        .map((b) => ({
-          path: b.path,
-          displayName: b.name || b.path,
-          type: classifyFolder(b.path, b.flags),
-          totalCount: b.status?.total,
-          unreadCount: b.status?.unseen,
-        }))
+        .map((b) => {
+          // ImapFlow: specialUse 为 '\\Inbox' 之类字符串;兼容旧 flags 集合
+          const specialUse = b.specialUse ? new Set([b.specialUse]) : (b.flags ?? null)
+          return {
+            path: b.path,
+            displayName: b.name || b.path,
+            type: classifyFolder(b.path, specialUse),
+            totalCount: b.status?.total,
+            unreadCount: b.status?.unseen,
+          }
+        })
     } finally {
       await safeLogout(client)
     }
   }
 
-  async fetch(opts: { folder: string; since?: Date; uidRange?: [number, number] }): Promise<RawMessage[]> {
+  async fetch(opts: { folder: string; since?: Date; uidRange?: [number, number]; highestModSeq?: bigint }): Promise<RawMessage[]> {
     const client = await this.makeClient()
     const result: RawMessage[] = []
     try {
       await client.connect()
       const lock = await client.getMailboxLock(opts.folder)
       try {
-        // UID 范围优先（增量同步）；否则 since；否则未读（回退全部）
+        // CONDSTORE modseq 优先(增量);其次 UID 范围;其次 since;否则未读(回退全部)
         let uids: number[]
-        if (opts.uidRange) {
+        if (opts.highestModSeq != null) {
+          uids = await client.search({ modseq: opts.highestModSeq }, { uid: true })
+        } else if (opts.uidRange) {
           const [from, to] = opts.uidRange
           uids = await client.search({ uid: { gte: from, lte: to } })
         } else if (opts.since) {
@@ -145,7 +151,13 @@ export class ImapAdapter implements MailAdapter {
   }
 
   async move(uid: number, fromFolder: string, toFolder: string): Promise<void> {
-    await this.withLock(fromFolder, (client) => client.messageMove(uid, toFolder, { uid: true }))
+    const client = await this.makeClient()
+    try {
+      await client.connect()
+      await client.messageMove({ uid: true, range: String(uid), source: fromFolder, destination: toFolder })
+    } finally {
+      await safeLogout(client)
+    }
   }
 
   async markRead(uid: number, folder: string, isRead: boolean): Promise<void> {
@@ -157,7 +169,16 @@ export class ImapAdapter implements MailAdapter {
   }
 
   async delete(uid: number, folder: string): Promise<void> {
-    await this.withLock(folder, (client) => client.messageDelete(uid, { uid: true }))
+    const client = await this.makeClient()
+    try {
+      await client.connect()
+      await client.messageFlagsAdd({ uid: true, range: String(uid), add: ['\\Deleted'] })
+      if (typeof (client as AnyClient).expunge === 'function') {
+        await (client as AnyClient).expunge()
+      }
+    } finally {
+      await safeLogout(client)
+    }
   }
 
   private async withLock(folder: string, fn: (client: AnyClient) => Promise<void>): Promise<void> {

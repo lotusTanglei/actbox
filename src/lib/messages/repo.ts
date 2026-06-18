@@ -29,7 +29,7 @@ export function upsertMessage(db: Database.Database, m: MessageUpsert): boolean 
   db.prepare(
     `INSERT INTO messages
        (message_id, subject, sender, "to", cc, bcc, body, body_html, body_html_text, received_at, processed_at, direction, account_id, folder, imap_uid)
-     VALUES (?,?,?,?,?,?,?,?,?,?,'in',?,?,?)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,'in',?,?,?)
      ON CONFLICT(message_id) DO UPDATE SET
        subject=excluded.subject, sender=excluded.sender, "to"=excluded."to", cc=excluded.cc, bcc=excluded.bcc,
        body=excluded.body, body_html=excluded.body_html, body_html_text=excluded.body_html_text, received_at=excluded.received_at,

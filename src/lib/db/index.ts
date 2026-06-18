@@ -6,6 +6,7 @@ import * as schema from './schema'
 import path from 'path'
 import fs from 'fs'
 import { alignBaseline, migrate } from './migrate-runner'
+import { runFtsMigrate } from './fts-migrate'
 
 let _db: ReturnType<typeof drizzle> | null = null
 let _raw: Database.Database | null = null
@@ -37,6 +38,9 @@ export function getDb() {
     alignBaseline(sqlite, { migrationsFolder })
     migrate(_db, { migrationsFolder })
   }
+
+  // FTS5 全文索引(虚表+触发器+segment UDF+存量分词回填)。plan-07 Task 3
+  runFtsMigrate(sqlite)
 
   return _db
 }

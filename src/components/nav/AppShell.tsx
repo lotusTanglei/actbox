@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { Sidebar } from './Sidebar'
 import { onRefresh } from '@/lib/refresh-bus'
 import { useMailEvents } from '@/components/realtime/useMailEvents'
+import { Notifications } from '@/components/realtime/Notifications'
 
 interface AppShellProps {
   children: React.ReactNode
@@ -82,6 +83,7 @@ export function AppShell({ children }: AppShellProps) {
         onSearch={handleSearch}
       />
       <main className="flex-1 overflow-hidden">{children}</main>
+      <Notifications />
     </div>
   )
 }

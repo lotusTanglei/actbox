@@ -95,3 +95,26 @@ export const folders = sqliteTable('folders', {
 }, (t) => ({
   accPathUq: uniqueIndex('uq_folders_account_path').on(t.accountId, t.path),
 }))
+
+/** 附件表（内容寻址 sha256 落盘 + 引用计数去重）—— plan-04 Task 1
+ *  storagePath/sha256 可空：超 perAttachment 上限的附件「记表不落盘」（storagePath=null）。
+ *  scanStatus/overSizeLimit 供 Task 4 流式解析 + 病毒扫描钩子写入。 */
+export const attachments = sqliteTable('attachments', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  accountId: integer('account_id').notNull(),
+  messageId: integer('message_id').notNull(), // messages.id 外键
+  filename: text('filename').notNull(), // 清洗后
+  mimeType: text('mime_type'),
+  size: integer('size').notNull(),
+  contentId: text('content_id'), // MIME Content-ID（内联用，可空）
+  isInline: integer('is_inline', { mode: 'boolean' }).notNull().default(false),
+  storagePath: text('storage_path'), // 相对根的 sha256 内容寻址路径；超限未落盘时为 null
+  sha256: text('sha256'), // 内容 sha256；未下载内容时为 null
+  scanStatus: text('scan_status').notNull().default('ok'), // ok | flagged（病毒扫描钩子结果）
+  scanReason: text('scan_reason'), // 钩子返回的命中原因
+  overSizeLimit: integer('over_size_limit', { mode: 'boolean' }).notNull().default(false),
+  downloadedAt: integer('downloaded_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+}, (t) => ({
+  msgIdx: index('idx_attachments_message').on(t.messageId),
+  shaIdx: index('idx_attachments_sha').on(t.sha256),
+}))

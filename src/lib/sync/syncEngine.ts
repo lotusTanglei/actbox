@@ -4,11 +4,13 @@
 // fetch route 与 scheduler 共用,避免逻辑三处重复。增量同步的 UIDVALIDITY/UID
 // 精确回写属 plan-03,这里用 since 时间窗 + messageId 去重做近似增量。
 
-import { getDb } from '@/lib/db'
+import { getDb, getRawDb } from '@/lib/db'
 import { accounts, messages, todos } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
 import { getAdapter, listActiveAccountIds, ensureBootstrapAccount } from '@/lib/adapter/mail/adapterRegistry'
 import { extractTodos } from '@/lib/extractor'
+import { extractAttachments } from '@/lib/attachments/extract'
+import { getAttachmentsRoot } from '@/lib/attachments/store'
 
 type Db = ReturnType<typeof getDb>
 
@@ -65,6 +67,8 @@ async function syncOneAccount(accountId: number, db: Db): Promise<AccountSyncRes
       ? new Date(row.lastSyncedAt.getTime() - OVERLAP_MS)
       : new Date(Date.now() - INITIAL_LOOKBACK_MS)
     const raws = await adapter.fetch({ folder: 'INBOX', since: lastTs })
+    const rawDb = getRawDb()
+    const attRoot = getAttachmentsRoot()
 
     let newTodos = 0
     let skipped = 0
@@ -78,29 +82,32 @@ async function syncOneAccount(accountId: number, db: Db): Promise<AccountSyncRes
       }
 
       const body = msg.body || ''
-      if (body.trim().length < 10) {
+      let todoCount = 0
+      if (body.trim().length >= 10) {
+        const extractResult = await extractTodos(body)
+        todoCount = extractResult.todos.length
+        for (const todo of extractResult.todos) {
+          db.insert(todos)
+            .values({
+              title: todo.title,
+              dueDate: todo.dueDate || null,
+              priority: todo.priority || null,
+              context: todo.context || null,
+              sourceMessageId: mid,
+              sourceSubject: msg.subject,
+              sourceFrom: msg.from,
+            })
+            .returning()
+            .all()
+          newTodos++
+        }
+      } else {
         // 正文过短:仍记录以免重复拉取,但不抽取待办
-        db.insert(messages)
-          .values({
-            messageId: mid,
-            subject: msg.subject,
-            from: msg.from,
-            to: msg.to ?? null,
-            cc: msg.cc ?? null,
-            body,
-            bodyHtml: msg.bodyHtml || null,
-            receivedAt: msg.receivedAt,
-            accountId,
-            folder: msg.folder || 'INBOX',
-            imapUid: msg.imapUid ?? null,
-          })
-          .run()
         skipped++
-        continue
       }
 
-      const extractResult = await extractTodos(body)
-      db.insert(messages)
+      const ins = db
+        .insert(messages)
         .values({
           messageId: mid,
           subject: msg.subject,
@@ -113,24 +120,24 @@ async function syncOneAccount(accountId: number, db: Db): Promise<AccountSyncRes
           accountId,
           folder: msg.folder || 'INBOX',
           imapUid: msg.imapUid ?? null,
-          todoCount: extractResult.todos.length,
+          todoCount,
         })
-        .run()
+        .returning({ id: messages.id })
+        .all()
+      const dbMsgId = ins[0]?.id
 
-      for (const todo of extractResult.todos) {
-        db.insert(todos)
-          .values({
-            title: todo.title,
-            dueDate: todo.dueDate || null,
-            priority: todo.priority || null,
-            context: todo.context || null,
-            sourceMessageId: mid,
-            sourceSubject: msg.subject,
-            sourceFrom: msg.from,
+      // 附件抽取(失败不阻断邮件入库,仅记日志)。plan-04 Task 6。
+      if (msg.rawSource && dbMsgId) {
+        try {
+          await extractAttachments(msg.rawSource, {
+            accountId,
+            messageId: dbMsgId,
+            root: attRoot,
+            db: rawDb,
           })
-          .returning()
-          .all()
-        newTodos++
+        } catch (e) {
+          console.error('[sync] attachment extract failed for', mid, e instanceof Error ? e.message : e)
+        }
       }
     }
 

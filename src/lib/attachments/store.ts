@@ -14,6 +14,11 @@ export interface StoreKey {
   messageId: number
 }
 
+/** 附件落盘根目录(持久化,与 actbox.db 同在 data/ 下,便于备份)。storagePath 相对此根。 */
+export function getAttachmentsRoot(): string {
+  return path.join(process.cwd(), 'data')
+}
+
 /**
  * 构造并校验附件落盘相对路径：attachments/{accountId}/{messageId}/{sha256}.bin。
  * sha256 为外部/半外部输入,resolve 后必须落在「该消息目录」内,否则抛路径穿越。

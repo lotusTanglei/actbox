@@ -108,6 +108,7 @@ export class ImapAdapter implements MailAdapter {
             accountId: this.cfg.id,
             folder: opts.folder,
             imapUid: msg.uid ?? undefined,
+            rawSource: Buffer.isBuffer(msg.source) ? msg.source : Buffer.from(msg.source),
           })
         }
       } finally {
@@ -142,6 +143,8 @@ export class ImapAdapter implements MailAdapter {
         path: a.path,
         content: a.content,
         cid: a.cid,
+        // 内联(有 cid)→ inline 渲染;外联 → attachment 下载。plan-04 Task 6。
+        contentDisposition: a.cid ? 'inline' : 'attachment',
       })),
       headers: params.replyToMessageId
         ? { 'In-Reply-To': params.inReplyTo || params.replyToMessageId, References: params.replyToMessageId }

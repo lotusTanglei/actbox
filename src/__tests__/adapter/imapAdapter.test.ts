@@ -54,6 +54,25 @@ describe('ImapAdapter 契约', () => {
     )
   })
 
+  it('send 附件:有 cid → contentDisposition inline,无 cid → attachment', async () => {
+    const sendMail = vi.fn().mockResolvedValue({ messageId: '<id>' })
+    const a = new ImapAdapter(cfg(), { transporterFactory: () => ({ sendMail }) as any })
+    await a.send({
+      to: 'b@x',
+      subject: 's',
+      body: 't',
+      attachments: [
+        { filename: 'logo.png', content: 'b64', cid: 'img1' },
+        { filename: 'doc.pdf', path: '/p/doc.pdf' },
+      ],
+    })
+    const arg = sendMail.mock.calls[0][0]
+    expect(arg.attachments).toEqual([
+      expect.objectContaining({ filename: 'logo.png', cid: 'img1', contentDisposition: 'inline' }),
+      expect.objectContaining({ filename: 'doc.pdf', contentDisposition: 'attachment' }),
+    ])
+  })
+
   it('testConnection 成功返回 ok', async () => {
     const client = { connect: vi.fn().mockResolvedValue(undefined), logout: vi.fn() } as any
     const a = new ImapAdapter(cfg(), { clientFactory: async () => client })

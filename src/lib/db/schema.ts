@@ -189,3 +189,33 @@ export const rules = sqliteTable('rules', {
   accOrderIdx: index('idx_rules_account_order').on(t.accountId, t.order),
   accKindIdx: index('idx_rules_account_kind').on(t.accountId, t.kind),
 }))
+
+/** 发送队列（定时/撤销窗口转发，所有外发邮件先入 outbox 再发）*/
+export const outbox = sqliteTable('outbox', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  accountId: integer('account_id'),
+  to: text('to').notNull(),
+  cc: text('cc'),
+  bcc: text('bcc'),
+  subject: text('subject'),
+  bodyHtml: text('body_html'),
+  scheduledAt: integer('scheduled_at').notNull(),          // UTC ms epoch
+  status: text('status', { enum: ['queued', 'sending', 'sent', 'failed', 'bounced'] }).notNull().default('queued'),
+  attempts: integer('attempts').notNull().default(0),
+  error: text('error'),
+  createdAt: integer('created_at').notNull().$defaultFn(() => Date.now()),
+  sentAt: integer('sent_at'),
+}, (t) => ({
+  scheduledIdx: index('idx_outbox_scheduled').on(t.status, t.scheduledAt),
+  accountIdx: index('idx_outbox_account').on(t.accountId),
+}))
+
+/** 邮件模板（变量替换，撰写时插入）*/
+export const templates = sqliteTable('templates', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  accountId: integer('account_id'),                         // null=全账号通用
+  name: text('name').notNull(),
+  bodyHtml: text('body_html').notNull(),
+  variables: text('variables'),                             // JSON 字符串
+  createdAt: integer('created_at').notNull().$defaultFn(() => Date.now()),
+})

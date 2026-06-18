@@ -4,6 +4,7 @@ import cron from 'node-cron'
 
 let scheduledTask: ReturnType<typeof cron.schedule> | null = null
 let snoozeTask: ReturnType<typeof cron.schedule> | null = null
+let outboxTask: ReturnType<typeof cron.schedule> | null = null
 
 /**
  * 启动定时拉取
@@ -23,6 +24,7 @@ export function startScheduler(
     .catch((e) => console.error('[Scheduler] supervisors start failed', e))
 
   // Snooze 到期扫描: 每分钟检查到期邮件并唤醒。plan-08 Task 6
+  // Snooze 到期扫描: 每分钟检查到期邮件并唤醒。plan-08 Task 6
   snoozeTask = cron.schedule('* * * * *', async () => {
     try {
       const { getRawDb } = await import('@/lib/db')
@@ -37,6 +39,14 @@ export function startScheduler(
     } catch (e) {
       console.error('[Scheduler] Snooze awake failed:', e)
     }
+  })
+  // Outbox 定时发送: 每分钟扫描到点邮件发出。plan-13 Task 5
+  outboxTask = cron.schedule('* * * * *', async () => {
+    try {
+      const { processOutbox } = await import('@/lib/outbox/worker')
+      const r = await processOutbox()
+      if (r.processed > 0) console.log(`[Scheduler] Outbox 发送: ${r.sent} sent, ${r.retried} retried, ${r.failed} failed, ${r.bounced} bounced`)
+    } catch (e) { console.error('[Scheduler] Outbox process failed:', e) }
   })
 
   scheduledTask = cron.schedule(cronExpression, async () => {
@@ -66,6 +76,10 @@ export function stopScheduler() {
   if (snoozeTask) {
     snoozeTask.stop()
     snoozeTask = null
+  }
+  if (outboxTask) {
+    outboxTask.stop()
+    outboxTask = null
   }
 }
 

@@ -14,6 +14,8 @@ import { getAttachmentsRoot } from '@/lib/attachments/store'
 import { htmlToText } from '@/lib/db/body-html-text'
 import { computeThreadId } from '@/lib/threads/assign'
 import { bumpFromMessage } from '@/lib/contacts/repo'
+import { runRulesForMessage } from '@/lib/rules/actions'
+import { applyAction } from '@/lib/sync/writeback'
 
 type Db = ReturnType<typeof getDb>
 
@@ -157,6 +159,28 @@ async function syncOneAccount(accountId: number, db: Db): Promise<AccountSyncRes
       // bump 联系人常用度（收信 → from，失败不影响主流程）
       if (dbMsgId) {
         try { bumpFromMessage(rawDb, { accountId, from: msg.from }) } catch { /* 降级 */ }
+      }
+
+      // 规则引擎：对新收邮件匹配并执行规则。plan-10 Task 4 Step 6
+      if (dbMsgId) {
+        try {
+          const adapter = getAdapter(accountId, { db })
+          const boundApplyAction = (d: any, opts: any) => applyAction(d, { ...opts, adapter })
+          await runRulesForMessage(rawDb, {
+            context: {
+              messageId: dbMsgId, accountId,
+              from: msg.from ?? '', to: msg.to ?? '', cc: msg.cc ?? '',
+              subject: msg.subject ?? '', body: msg.body ?? '',
+              hasAttachment: false, sizeKb: 0, labelIds: [],
+            },
+            getAdapter: (id: number) => getAdapter(id, { db }),
+            applyAction: boundApplyAction,
+            send: async (m: any) => {
+              const a = getAdapter(accountId, { db })
+              if (a) await a.send(m)
+            },
+          })
+        } catch { /* 规则引擎失败不阻断收信 */ }
       }
     }
 

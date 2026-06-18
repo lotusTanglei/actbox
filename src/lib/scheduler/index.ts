@@ -3,6 +3,7 @@
 import cron from 'node-cron'
 
 let scheduledTask: ReturnType<typeof cron.schedule> | null = null
+let snoozeTask: ReturnType<typeof cron.schedule> | null = null
 
 /**
  * 启动定时拉取
@@ -20,6 +21,23 @@ export function startScheduler(
   import('@/lib/realtime/startSupervisors')
     .then(({ startSupervisors }) => startSupervisors())
     .catch((e) => console.error('[Scheduler] supervisors start failed', e))
+
+  // Snooze 到期扫描: 每分钟检查到期邮件并唤醒。plan-08 Task 6
+  snoozeTask = cron.schedule('* * * * *', async () => {
+    try {
+      const { getRawDb } = await import('@/lib/db')
+      const { runSnoozeAwake } = await import('@/lib/snooze')
+      const { emitRefresh } = await import('@/lib/refresh-bus')
+      const stats = runSnoozeAwake(getRawDb(), {
+        onDue: () => emitRefresh(),
+      })
+      if (stats.woke > 0) {
+        console.log(`[Scheduler] Snooze 到期唤醒 ${stats.woke} 封邮件`)
+      }
+    } catch (e) {
+      console.error('[Scheduler] Snooze awake failed:', e)
+    }
+  })
 
   scheduledTask = cron.schedule(cronExpression, async () => {
     try {
@@ -44,6 +62,10 @@ export function stopScheduler() {
     scheduledTask.stop()
     scheduledTask = null
     console.log('[Scheduler] 定时拉取已停止')
+  }
+  if (snoozeTask) {
+    snoozeTask.stop()
+    snoozeTask = null
   }
 }
 

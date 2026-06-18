@@ -13,12 +13,16 @@ import Highlight from '@tiptap/extension-highlight'
 import TextAlign from '@tiptap/extension-text-align'
 import Image from '@tiptap/extension-image'
 import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table'
+import { debounce } from '@/lib/utils/debounce'
 
 interface RichTextEditorProps {
   value: string
   onChange: (html: string) => void
   /** 粘贴/拖入图片时回调:上传后返回 cid(插入 <img src="cid:...">);失败返回 undefined。plan-04 Task 9 */
   onInlineImage?: (file: File) => Promise<string | undefined>
+  /** debounced 自动保存回调(停顿 debounceMs 后触发;卸载时 flush 最后值)。plan-05 Task 7 */
+  onChangeDebounced?: (html: string) => void
+  debounceMs?: number
 }
 
 const FONT_SIZES = ['12px', '14px', '16px', '18px', '24px', '32px']
@@ -67,7 +71,7 @@ function Tool({
   )
 }
 
-export function RichTextEditor({ value, onChange, onInlineImage }: RichTextEditorProps) {
+export function RichTextEditor({ value, onChange, onInlineImage, onChangeDebounced, debounceMs = 8000 }: RichTextEditorProps) {
   const onChangeRef = useRef(onChange)
   useEffect(() => {
     onChangeRef.current = onChange
@@ -78,6 +82,18 @@ export function RichTextEditor({ value, onChange, onInlineImage }: RichTextEdito
   useEffect(() => {
     inlineCbRef.current = onInlineImage
   }, [onInlineImage])
+
+  // debounced 自动保存:停顿 debounceMs(≤10s 要求)触发;卸载 flush 最后值防丢失
+  const autosaveRef = useRef<((html: string) => void) | null>(null)
+  useEffect(() => {
+    if (!onChangeDebounced) return
+    const d = debounce(onChangeDebounced, debounceMs)
+    autosaveRef.current = d
+    return () => {
+      d.flush()
+      autosaveRef.current = null
+    }
+  }, [onChangeDebounced, debounceMs])
 
   // 粘贴/拖入图片 → 上传拿 cid → 插入 <img src="cid:...">;调用方(ComposeMail)登记为内联附件
   const ingestImage = async (file: File) => {
@@ -108,6 +124,7 @@ export function RichTextEditor({ value, onChange, onInlineImage }: RichTextEdito
       const html = editor.getHTML()
       lastEmitted.current = html
       onChangeRef.current(html)
+      autosaveRef.current?.(html)
     },
     editorProps: {
       attributes: {

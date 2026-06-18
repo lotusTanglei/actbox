@@ -57,6 +57,28 @@ export function readStream(root: string, storagePath: string): fs.ReadStream {
   return fs.createReadStream(full)
 }
 
+/** 撰写上传临时落盘:attachments/tmp/{sha256}.bin(发送前暂存,无 messageId)。带穿越防护。 */
+export function resolveSafeTmpPath(root: string, sha256: string): string {
+  const rel = path.join('attachments', 'tmp', `${sha256}.bin`)
+  const full = path.resolve(root, rel)
+  const safeDir = path.resolve(root, 'attachments', 'tmp')
+  if (!full.startsWith(safeDir + path.sep)) {
+    throw new Error(`attachment path traversal detected (tmp): ${sha256}`)
+  }
+  return rel
+}
+
+export async function storeTmpContent(root: string, buf: Buffer): Promise<{ storagePath: string; sha256: string }> {
+  const sha = crypto.createHash('sha256').update(buf).digest('hex')
+  const rel = resolveSafeTmpPath(root, sha)
+  const full = path.resolve(root, rel)
+  if (!fs.existsSync(full)) {
+    fs.mkdirSync(path.dirname(full), { recursive: true })
+    await fs.promises.writeFile(full, buf)
+  }
+  return { storagePath: rel, sha256: sha }
+}
+
 export interface ReleaseStats {
   released: number // 删除的 attachments 行数
   filesDeleted: number // 实际 unlink 的物理文件数

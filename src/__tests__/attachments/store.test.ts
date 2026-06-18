@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
-import { storeContent, resolveSafePath, releaseByMessage, readStream } from '@/lib/attachments/store'
+import { storeContent, resolveSafePath, releaseByMessage, readStream, storeTmpContent, resolveSafeTmpPath } from '@/lib/attachments/store'
 import { memDb } from '../helpers/memDb'
 
 let root: string
@@ -51,6 +51,21 @@ describe('附件落盘 store', () => {
 
   it('readStream 拒绝路径穿越', () => {
     expect(() => readStream(tmpRoot(), '../../etc/passwd')).toThrow(/traversal|escape/i)
+  })
+
+  it('resolveSafeTmpPath 拒绝路径穿越', () => {
+    expect(() => resolveSafeTmpPath(tmpRoot(), '../../etc/x')).toThrow(/traversal|escape/i)
+  })
+
+  it('storeTmpContent 落盘到 attachments/tmp/{sha}.bin 并返回 sha', async () => {
+    const buf = Buffer.from('tmp-upload')
+    const r = await storeTmpContent(tmpRoot(), buf)
+    expect(r.storagePath).toContain('attachments/tmp/')
+    expect(r.sha256).toMatch(/^[0-9a-f]{64}$/)
+    expect(fs.existsSync(path.join(tmpRoot(), r.storagePath))).toBe(true)
+    // 相同内容不重写
+    const r2 = await storeTmpContent(tmpRoot(), buf)
+    expect(r2.storagePath).toBe(r.storagePath)
   })
 
   it('releaseByMessage 删行 + unlink 独占文件', async () => {

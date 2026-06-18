@@ -10,8 +10,8 @@ export function splitAddresses(s: string): string[] {
     .filter(Boolean)
 }
 
-// RFC 简化邮箱正则(够用,非全量 RFC 5322):local@domain,域名至少一个点。
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+// RFC 简化邮箱正则(够用,非全量 RFC 5322):local@domain,允许无 TLD 的本地/内网域(如 b@y)。
+const EMAIL_RE = /^[^\s@]+@[^\s@]+$/
 
 export interface ValidationResult {
   valid: string[]

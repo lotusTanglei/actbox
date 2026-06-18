@@ -20,6 +20,8 @@ export interface SendParams {
   attachments?: { filename: string; path?: string; content?: string; cid?: string }[]
   replyToMessageId?: string
   inReplyTo?: string
+  /** 自定义头(转发 Auto-Submitted/References 等);缺省时由 replyToMessageId 推导。plan-05 Task 5 */
+  headers?: Record<string, string>
 }
 
 export interface AccountConfig {

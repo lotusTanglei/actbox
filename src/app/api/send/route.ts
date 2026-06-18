@@ -2,11 +2,13 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import path from 'path'
-import { getDb } from '@/lib/db'
+import { getDb, getRawDb } from '@/lib/db'
 import { accounts, messages } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
 import { getAdapter, listActiveAccountIds, ensureBootstrapAccount } from '@/lib/adapter/mail/adapterRegistry'
 import { getAttachmentsRoot } from '@/lib/attachments/store'
+import { splitAddresses, validateRecipients } from '@/lib/mail/recipients'
+import { buildForward } from '@/lib/mail/forward'
 
 /** 把客户端传来的相对 storagePath 解析为绝对路径,且必须落在 attachments/tmp/ 内(防穿越,避免 nodemailer 读任意文件)。 */
 function resolveAttachmentPath(storagePath: string): string {
@@ -25,7 +27,14 @@ function resolveAttachmentPath(storagePath: string): string {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { to, subject, body: mailBody, bodyHtml, replyToMessageId, cc, bcc, accountId, attachments } = body
+    const { to, subject, body: mailBody, bodyHtml, replyToMessageId, cc, bcc, accountId, attachments, forwardOfMessageId } = body
+
+    // 收件人校验(to/cc/bcc 合并)
+    const allAddrs = [...splitAddresses(to || ''), ...splitAddresses(cc || ''), ...splitAddresses(bcc || '')]
+    const { invalid } = validateRecipients(allAddrs)
+    if (invalid.length) {
+      return NextResponse.json({ error: '非法收件人地址', invalid }, { status: 400 })
+    }
 
     if (!to || !subject || !mailBody) {
       return NextResponse.json({ error: 'Missing to, subject, or body' }, { status: 400 })
@@ -67,7 +76,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '发件账号不可用' }, { status: 400 })
     }
 
-    const result = await adapter.send({ to, cc, bcc, subject, body: mailBody, bodyHtml, replyToMessageId, attachments: sendAttachments })
+    // 转发:加载源邮件 → buildForward 取头(subject/body 已由 compose 预填,此处补 Auto-Submitted/References)
+    let fwdHeaders: Record<string, string> | undefined
+    if (forwardOfMessageId) {
+      const src = getRawDb()
+        .prepare(`SELECT message_id, subject, sender AS "from", "to", body, received_at FROM messages WHERE message_id = ?`)
+        .get(forwardOfMessageId) as
+        | { message_id: string; subject: string | null; from: string | null; to: string | null; body: string | null; received_at: number | null }
+        | undefined
+      if (src) {
+        fwdHeaders = buildForward(
+          {
+            messageId: src.message_id || '',
+            subject: src.subject || '',
+            from: src.from || '',
+            to: src.to || '',
+            body: src.body || '',
+            receivedAt: src.received_at ? new Date(src.received_at * 1000) : null,
+          },
+          { accountId: accId },
+        ).headers
+      }
+    }
+
+    const result = await adapter.send({ to, cc, bcc, subject, body: mailBody, bodyHtml, replyToMessageId, attachments: sendAttachments, headers: fwdHeaders })
 
     const row = db.select().from(accounts).where(eq(accounts.id, accId)).all()[0] as any
     db.insert(messages)

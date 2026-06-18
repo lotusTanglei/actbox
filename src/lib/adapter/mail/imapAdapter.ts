@@ -146,9 +146,11 @@ export class ImapAdapter implements MailAdapter {
         // 内联(有 cid)→ inline 渲染;外联 → attachment 下载。plan-04 Task 6。
         contentDisposition: a.cid ? 'inline' : 'attachment',
       })),
-      headers: params.replyToMessageId
-        ? { 'In-Reply-To': params.inReplyTo || params.replyToMessageId, References: params.replyToMessageId }
-        : undefined,
+      headers: params.headers
+        ? params.headers
+        : params.replyToMessageId
+          ? { 'In-Reply-To': params.inReplyTo || params.replyToMessageId, References: params.replyToMessageId }
+          : undefined,
     })
     return { messageId: result.messageId }
   }

@@ -1,6 +1,6 @@
 // src/lib/db/schema.ts
 
-import { sqliteTable, text, integer, index, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, index, uniqueIndex, primaryKey } from 'drizzle-orm/sqlite-core'
 
 /** 待办表 */
 export const todos = sqliteTable('todos', {
@@ -118,4 +118,25 @@ export const attachments = sqliteTable('attachments', {
 }, (t) => ({
   msgIdx: index('idx_attachments_message').on(t.messageId),
   shaIdx: index('idx_attachments_sha').on(t.sha256),
+}))
+
+/** 标签表（按账号隔离，支持嵌套与着色） */
+export const labels = sqliteTable('labels', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  accountId: integer('account_id').notNull(),
+  parentId: integer('parent_id'),                 // 嵌套父标签 id（null=顶层）
+  name: text('name').notNull(),
+  color: text('color').notNull().default('#6b7280'), // 十六进制颜色
+}, (t) => ({
+  accNameUq: uniqueIndex('uq_labels_account_name').on(t.accountId, t.name),
+  accParentIdx: index('idx_labels_account_parent').on(t.accountId, t.parentId),
+}))
+
+/** 邮件-标签关联表（多对多） */
+export const messageLabels = sqliteTable('message_labels', {
+  messageId: integer('message_id').notNull(),
+  labelId: integer('label_id').notNull(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.messageId, t.labelId] }),
+  labelIdx: index('idx_message_labels_label').on(t.labelId),
 }))

@@ -5,7 +5,64 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 
-type Section = 'email' | 'llm' | 'scheduler' | 'signature'
+type Section = 'email' | 'llm' | 'scheduler' | 'signature' | 'signatures'
+
+// ── 签名管理组件 ──
+function SignaturesSection() {
+  const [sigs, setSigs] = useState<Array<{ id: number; name: string; body_html: string; body_text: string }>>([])
+  const [name, setName] = useState('')
+  const [bodyHtml, setBodyHtml] = useState('')
+  const [editId, setEditId] = useState<number | null>(null)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    const r = await fetch('/api/signatures')
+    const d = await r.json()
+    setSigs(d.signatures || [])
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const save = async () => {
+    if (!name) return
+    if (editId) {
+      await fetch(`/api/signatures/${editId}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, bodyHtml, bodyText: bodyHtml }) })
+    } else {
+      await fetch('/api/signatures', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, bodyHtml, bodyText: bodyHtml }) })
+    }
+    setName(''); setBodyHtml(''); setEditId(null); setMsg('✅ 已保存'); load()
+  }
+
+  const del = async (id: number) => {
+    await fetch(`/api/signatures/${id}`, { method: 'DELETE' })
+    load()
+  }
+
+  return (
+    <div className="space-y-3 rounded-lg border p-4">
+      <h3 className="font-medium">签名管理（多套）</h3>
+      {msg && <div className="rounded-md border border-green-200 bg-green-50 p-2 text-xs text-green-700">{msg}</div>}
+      <div className="flex gap-2">
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="签名名称(如:正式/私人)" className="flex-1 rounded-md border px-3 py-2 text-sm" />
+        <button onClick={save} className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90">{editId ? '更新' : '新建'}</button>
+      </div>
+      <textarea value={bodyHtml} onChange={(e) => setBodyHtml(e.target.value)} rows={3} placeholder="签名正文" className="w-full rounded-md border px-3 py-2 text-sm" />
+      {sigs.length > 0 && (
+        <div className="space-y-1">
+          {sigs.map((s) => (
+            <div key={s.id} className="flex items-center justify-between rounded border px-3 py-1.5 text-sm">
+              <span>{s.name}</span>
+              <div className="flex gap-1">
+                <button onClick={() => { setName(s.name); setBodyHtml(s.body_html || ''); setEditId(s.id) }} className="text-xs text-primary hover:underline">编辑</button>
+                <button onClick={() => del(s.id)} className="text-xs text-destructive hover:underline">删除</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ── LLM 配置表单组件 ──
 const CAPABILITIES = ['summarize', 'polish', 'classify', 'extract', 'reply'] as const
@@ -292,6 +349,7 @@ export default function SettingsPage() {
     { key: 'llm', label: '🤖 LLM' },
     { key: 'scheduler', label: '⏰ 定时拉取' },
     { key: 'signature', label: '✍️ 签名' },
+    { key: 'signatures', label: '📝 签名管理' },
   ]
 
   return (
@@ -410,6 +468,9 @@ export default function SettingsPage() {
           </button>
         </div>
       )}
+
+      {/* Signatures Management */}
+      {section === 'signatures' && <SignaturesSection />}
 
       {/* Signature Settings */}
       {section === 'signature' && (

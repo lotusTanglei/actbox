@@ -59,6 +59,39 @@ interface Todo {
   context: string | null
 }
 
+function MailToCalendar({ message }: { message: Message }) {
+  const handleConvert = async () => {
+    try {
+      const r = await fetch('/api/calendar/events/from-mail', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ messageId: message.id }) })
+      const d = await r.json()
+      if (d.eventDraft) {
+        const params = new URLSearchParams()
+        params.set('title', d.eventDraft.title)
+        params.set('description', d.eventDraft.description || '')
+        window.open(`/calendar?${params}`, '_blank')
+      }
+    } catch { /* ignore */ }
+  }
+  return <button onClick={handleConvert} className="rounded border px-2 py-0.5 hover:bg-accent">📅 转日程</button>
+}
+
+function MailToTodo({ message }: { message: Message }) {
+  const handleConvert = async () => {
+    await fetch('/api/todos', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: (message.subject || '(无主题)').slice(0, 200),
+        sourceMessageId: message.messageId,
+        sourceSubject: message.subject,
+        sourceFrom: message.from,
+        status: 'pending',
+      }),
+    })
+    window.location.reload()
+  }
+  return <button onClick={handleConvert} className="rounded border px-2 py-0.5 hover:bg-accent">✅ 转待办</button>
+}
+
 /** AI 增强组件（摘要/智能回复/打标）*/
 function AIEnhancements({ message, id }: { message: Message; id: string }) {
   const [summary, setSummary] = useState<string | null>(null)
@@ -357,6 +390,12 @@ export default function MailDetailPage() {
 
       {/* AI 能力区 */}
       <AIEnhancements message={message} id={id} />
+
+      {/* 转日程 / 转任务 */}
+      <div className="flex gap-2 rounded-lg border bg-card/50 p-2 text-xs">
+        <MailToCalendar message={message} />
+        <MailToTodo message={message} />
+      </div>
 
       {/* Related Todos */}
       {todos.length > 0 && (

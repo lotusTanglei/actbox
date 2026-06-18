@@ -219,3 +219,33 @@ export const templates = sqliteTable('templates', {
   variables: text('variables'),                             // JSON 字符串
   createdAt: integer('created_at').notNull().$defaultFn(() => Date.now()),
 })
+
+/** 签名（多套，按账号分配）*/
+export const signatures = sqliteTable('signatures', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  bodyHtml: text('body_html'),
+  bodyText: text('body_text'),
+  createdAt: integer('created_at').notNull().$defaultFn(() => Date.now()),
+  updatedAt: integer('updated_at').notNull().$defaultFn(() => Date.now()),
+})
+
+/** 日历事件 */
+export const events = sqliteTable('events', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  accountId: integer('account_id'),
+  title: text('title').notNull(),
+  startsAt: integer('starts_at').notNull(),
+  endsAt: integer('ends_at'),
+  allDay: integer('all_day', { mode: 'boolean' }).notNull().default(false),
+  location: text('location'),
+  description: text('description'),
+  reminderMinutes: integer('reminder_minutes'),
+  sourceMessageId: text('source_message_id'),
+  remindedAt: integer('reminded_at'),
+  createdAt: integer('created_at').notNull().$defaultFn(() => Date.now()),
+}, (t) => ({
+  startsIdx: index('idx_events_starts').on(t.startsAt),
+  accountIdx: index('idx_events_account').on(t.accountId),
+  sourceIdx: index('idx_events_source').on(t.sourceMessageId),
+}))

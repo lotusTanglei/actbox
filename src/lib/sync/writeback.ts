@@ -6,6 +6,8 @@
 
 import type Database from 'better-sqlite3'
 import type { MailAdapter } from '@/lib/adapter/types'
+import type { MailEvent } from '@/lib/events/types'
+import { recomputeUnread } from '@/lib/messages/repo'
 
 export type WritebackAction = 'markRead' | 'star' | 'move' | 'archive' | 'restore' | 'delete'
 
@@ -15,10 +17,13 @@ export interface ApplyActionOpts {
   messageIds: number[]
   value?: boolean
   targetFolder?: string
+  /** 事件发布(状态变更 <10s 感知);缺省 noop(向后兼容)。plan-06 Task 7 */
+  publish?: (ev: MailEvent) => void
 }
 
 interface MsgRow {
   id: number
+  message_id: string
   account_id: number
   folder: string
   imap_uid: number | null
@@ -44,7 +49,7 @@ export async function applyAction(db: Database.Database, opts: ApplyActionOpts):
   const placeholders = messageIds.map(() => '?').join(',')
   const rows = db
     .prepare(
-      `SELECT id, account_id, folder, imap_uid, is_read, is_starred, is_deleted, is_archived, archived_at
+      `SELECT id, message_id, account_id, folder, imap_uid, is_read, is_starred, is_deleted, is_archived, archived_at
        FROM messages WHERE id IN (${placeholders})`,
     )
     .all(...messageIds) as MsgRow[]
@@ -120,6 +125,39 @@ export async function applyAction(db: Database.Database, opts: ApplyActionOpts):
   } catch (e) {
     revertSets(db, plans)
     throw e
+  }
+
+  // 3. 发布事件(状态变更 <10s 感知)。plan-06 Task 7
+  if (opts.publish) {
+    const touchedAccounts = new Set<number>()
+    for (const p of plans) {
+      const changes: { isRead?: boolean; isStarred?: boolean; folder?: string; isDeleted?: boolean; isArchived?: boolean } = {}
+      if ('is_read' in p.sets) changes.isRead = !!p.sets.is_read
+      if ('is_starred' in p.sets) changes.isStarred = !!p.sets.is_starred
+      if ('folder' in p.sets) changes.folder = String(p.sets.folder)
+      if ('is_deleted' in p.sets) changes.isDeleted = !!p.sets.is_deleted
+      if ('is_archived' in p.sets) changes.isArchived = !!p.sets.is_archived
+      opts.publish({
+        type: 'message-updated',
+        payload: {
+          messageId: p.row.message_id,
+          accountId: p.row.account_id,
+          folder: 'folder' in p.sets ? String(p.sets.folder) : p.row.folder,
+          changes,
+        },
+      })
+      touchedAccounts.add(p.row.account_id)
+    }
+    // move/restore 改变 folder → 刷新收件箱未读角标
+    if ((action === 'move' || action === 'restore' || action === 'archive') && touchedAccounts.size) {
+      for (const accId of touchedAccounts) {
+        const u = recomputeUnread(db, { accountId: accId, folder: 'INBOX' })
+        opts.publish({
+          type: 'unread-count',
+          payload: { accountId: accId, folder: 'INBOX', unread: u.unread, total: u.total },
+        })
+      }
+    }
   }
 }
 

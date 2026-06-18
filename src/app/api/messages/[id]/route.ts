@@ -6,6 +6,7 @@ import { messages } from '@/lib/db/schema'
 import { eq, and, not } from 'drizzle-orm'
 import { getAdapter } from '@/lib/adapter/mail/adapterRegistry'
 import { applyAction, type WritebackAction } from '@/lib/sync/writeback'
+import { eventBus } from '@/lib/events/eventBus'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -80,6 +81,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         messageIds: [msgId],
         value: body.value,
         targetFolder: body.targetFolder,
+        publish: (e) => eventBus.publish(e),
       })
       const updated = raw.prepare('SELECT * FROM messages WHERE id = ?').get(msgId)
       return NextResponse.json({ message: updated })

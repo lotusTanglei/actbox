@@ -67,4 +67,41 @@ describe('applyAction 回写', () => {
     await expect(applyAction(db, { adapter, action: 'markRead', messageIds: [1], value: true })).rejects.toThrow('net')
     expect((db.prepare('SELECT is_read FROM messages WHERE id=1').get() as any).is_read).toBe(0)
   })
+
+  it('markRead 成功后 publish message-updated(isRead)', async () => {
+    const adapter = { markRead: vi.fn().mockResolvedValue(undefined) } as any
+    const publish = vi.fn()
+    const db = memDb()
+    seed(db)
+    await applyAction(db, { adapter, action: 'markRead', messageIds: [1], value: true, publish })
+    expect(publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'message-updated',
+        payload: expect.objectContaining({
+          messageId: '<m1>',
+          accountId: 1,
+          folder: 'INBOX',
+          changes: { isRead: true },
+        }),
+      }),
+    )
+  })
+
+  it('move 成功后 publish message-updated(folder) + unread-count', async () => {
+    const adapter = { move: vi.fn().mockResolvedValue(undefined) } as any
+    const publish = vi.fn()
+    const db = memDb()
+    seed(db)
+    await applyAction(db, { adapter, action: 'move', messageIds: [1], targetFolder: 'Archive', publish })
+    const types = publish.mock.calls.map((c) => (c[0] as { type: string }).type)
+    expect(types).toContain('message-updated')
+    expect(types).toContain('unread-count')
+  })
+
+  it('无 publish 时向后兼容(不抛错)', async () => {
+    const adapter = { markRead: vi.fn().mockResolvedValue(undefined) } as any
+    const db = memDb()
+    seed(db)
+    await expect(applyAction(db, { adapter, action: 'markRead', messageIds: [1], value: true })).resolves.toBeUndefined()
+  })
 })

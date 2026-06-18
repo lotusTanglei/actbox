@@ -79,11 +79,11 @@
 
 - [x] plan-01 数据模型 + 迁移（drizzle-kit / messages 扩列 / body 回填）✅
 - [x] plan-02 多账号 + MailAdapter（accounts / ImapAdapter / 账号 UI）✅
-- [ ] plan-17 一行启动 + 自启（端口 / launchd）
+- [x] plan-17 一行启动 + 自启（端口 / launchd）✅
 
 阶段 1 · 承载
 
-- [ ] plan-03 文件夹体系 + IMAP 双向同步
+- [x] plan-03 文件夹体系 + IMAP 双向同步 ✅
 - [ ] plan-04 附件系统
 - [ ] plan-05 收发补全（CC/BCC/转发/草稿/签名）
 

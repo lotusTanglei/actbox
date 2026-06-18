@@ -108,6 +108,10 @@ export class ImapAdapter implements MailAdapter {
             accountId: this.cfg.id,
             folder: opts.folder,
             imapUid: msg.uid ?? undefined,
+            inReplyTo: parsed.inReplyTo || null,
+            references: parsed.references
+              ? (Array.isArray(parsed.references) ? parsed.references.join(' ') : String(parsed.references))
+              : null,
             rawSource: Buffer.isBuffer(msg.source) ? msg.source : Buffer.from(msg.source),
           })
         }

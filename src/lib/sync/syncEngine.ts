@@ -12,6 +12,7 @@ import { extractTodos } from '@/lib/extractor'
 import { extractAttachments } from '@/lib/attachments/extract'
 import { getAttachmentsRoot } from '@/lib/attachments/store'
 import { htmlToText } from '@/lib/db/body-html-text'
+import { computeThreadId } from '@/lib/threads/assign'
 
 type Db = ReturnType<typeof getDb>
 
@@ -107,6 +108,15 @@ async function syncOneAccount(accountId: number, db: Db): Promise<AccountSyncRes
         skipped++
       }
 
+      // 会话聚合：计算 thread_id（优先 References/In-Reply-To 根，回退规范化 Subject）
+      const threadId = computeThreadId(rawDb, {
+        accountId,
+        messageId: mid,
+        subject: msg.subject,
+        inReplyTo: msg.inReplyTo ?? null,
+        references: msg.references ?? null,
+      })
+
       const ins = db
         .insert(messages)
         .values({
@@ -123,6 +133,7 @@ async function syncOneAccount(accountId: number, db: Db): Promise<AccountSyncRes
           folder: msg.folder || 'INBOX',
           imapUid: msg.imapUid ?? null,
           todoCount,
+          threadId,
         })
         .returning({ id: messages.id })
         .all()

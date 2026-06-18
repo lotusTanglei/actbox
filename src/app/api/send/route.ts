@@ -10,6 +10,7 @@ import { getAttachmentsRoot } from '@/lib/attachments/store'
 import { splitAddresses, validateRecipients } from '@/lib/mail/recipients'
 import { buildForward } from '@/lib/mail/forward'
 import { htmlToText } from '@/lib/db/body-html-text'
+import { computeThreadId } from '@/lib/threads/assign'
 
 /** 把客户端传来的相对 storagePath 解析为绝对路径,且必须落在 attachments/tmp/ 内(防穿越,避免 nodemailer 读任意文件)。 */
 function resolveAttachmentPath(storagePath: string): string {
@@ -103,6 +104,25 @@ export async function POST(request: NextRequest) {
     const result = await adapter.send({ to, cc, bcc, subject, body: mailBody, bodyHtml, replyToMessageId, attachments: sendAttachments, headers: fwdHeaders })
 
     const row = db.select().from(accounts).where(eq(accounts.id, accId)).all()[0] as any
+
+    // 会话聚合：回复复用原邮件的 thread_id；新邮件按 subject 计算
+    let threadId: string | undefined
+    if (replyToMessageId) {
+      const orig = getRawDb()
+        .prepare('SELECT thread_id FROM messages WHERE message_id = ? LIMIT 1')
+        .get(replyToMessageId) as { thread_id: string | null } | undefined
+      threadId = orig?.thread_id || undefined
+    }
+    if (!threadId) {
+      threadId = computeThreadId(getRawDb(), {
+        accountId: accId,
+        messageId: result.messageId,
+        subject,
+        inReplyTo: replyToMessageId || null,
+        references: replyToMessageId || null,
+      })
+    }
+
     db.insert(messages)
       .values({
         messageId: result.messageId,
@@ -118,6 +138,7 @@ export async function POST(request: NextRequest) {
         isRead: true,
         accountId: accId,
         folder: 'Sent',
+        threadId,
       })
       .run()
 

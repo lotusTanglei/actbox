@@ -52,6 +52,9 @@ export interface RawMessage {
   folder?: string
   imapUid?: number
   imapSeq?: number
+  // 邮件头(plan-08 线程聚合用)
+  inReplyTo?: string | null
+  references?: string | null
   // 原始 MIME 源(plan-04 附件抽取用;adapter 保留,syncEngine 入库后据此 extractAttachments)
   rawSource?: Buffer
   // 兼容旧字段（receiver 等暂用，Task 8 重构后可移除）

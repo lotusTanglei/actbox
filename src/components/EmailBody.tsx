@@ -5,6 +5,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { sanitizeEmailHtml } from '@/lib/security/sanitize'
 
 interface EmailBodyProps {
   html?: string | null
@@ -38,10 +39,11 @@ export function EmailBody({ html, text }: EmailBodyProps) {
   useEffect(() => () => roRef.current?.disconnect(), [])
 
   if (html) {
+    const safeHtml = sanitizeEmailHtml(html) // 渲染前纵深净化
     return (
       <iframe
         ref={iframeRef}
-        srcDoc={html}
+        srcDoc={safeHtml}
         title="邮件正文"
         sandbox="allow-same-origin"
         onLoad={handleLoad}

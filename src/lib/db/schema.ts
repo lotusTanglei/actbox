@@ -1,6 +1,6 @@
 // src/lib/db/schema.ts
 
-import { sqliteTable, text, integer, index, uniqueIndex, primaryKey } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, real, index, uniqueIndex, primaryKey } from 'drizzle-orm/sqlite-core'
 
 /** 待办表 */
 export const todos = sqliteTable('todos', {
@@ -48,6 +48,12 @@ export const messages = sqliteTable('messages', {
   isDeleted: integer('is_deleted', { mode: 'boolean' }).notNull().default(false),
   // 关联待办数量（缓存，避免每次 join 查询）
   todoCount: integer('todo_count').notNull().default(0),
+  // 安全列 plan-11 Task 2
+  isSpam: integer('is_spam', { mode: 'boolean' }).notNull().default(false),
+  authResult: text('auth_result'),              // JSON: { spf, dkim, dmarc }
+  isExternal: integer('is_external', { mode: 'boolean' }).notNull().default(false),
+  spamReasons: text('spam_reasons'),            // JSON: string[]
+  spamScore: real('spam_score').notNull().default(0),
 }, (t) => ({
   accFolderUidIdx: index('idx_messages_account_folder_uid').on(t.accountId, t.folder, t.imapUid),
   threadIdx: index('idx_messages_thread').on(t.threadId),

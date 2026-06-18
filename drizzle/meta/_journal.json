@@ -64,6 +64,13 @@
       "when": 1781778451198,
       "tag": "0008_perfect_masque",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1781779381388,
+      "tag": "0009_equal_eternals",
+      "breakpoints": true
     }
   ]
 }

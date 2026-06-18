@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# actbox 一行启动脚本
+#   ./start            生产模式(next start,未构建则自动 build),默认端口 8321
+#   ACTBOX_DEV=1 ./start   开发模式(next dev)
+#   PORT=9000 ./start      自定义端口
+set -euo pipefail
+cd "$(dirname "$0")"
+
+# 数据/日志目录
+mkdir -p data logs data/logs
+
+# 加载本地环境变量(若存在)——供 db:migrate 等子进程使用(next start 自身也会读)
+if [ -f .env.local ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . ./.env.local
+  set +a
+fi
+
+# 默认端口 8321(避开常见占用:3000/8000/8080 等)
+export PORT="${PORT:-8321}"
+
+if [ "${ACTBOX_DEV:-0}" = "1" ]; then MODE="dev"; else MODE="prod"; fi
+echo "[start] 端口=${PORT}  模式=${MODE}"
+
+# 启动前迁移(含存量库基准对齐)
+npm run db:migrate
+
+if [ "${ACTBOX_DEV:-0}" = "1" ]; then
+  exec npm run dev
+else
+  # 生产:确保已构建,否则先 build
+  if [ ! -f .next/BUILD_ID ]; then
+    echo "[start] 未检测到构建产物,先执行 npm run build ..."
+    npm run build
+  fi
+  exec npm run start
+fi

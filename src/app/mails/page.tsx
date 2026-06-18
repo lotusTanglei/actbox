@@ -1,4 +1,4 @@
-// src/app/mails/page.tsx - 三栏邮件布局
+// src/app/mails/page.tsx - 三栏邮件布局 + 多选/批量/会话折叠/标签着色
 
 'use client'
 
@@ -20,25 +20,54 @@ interface Message {
   direction: string
   isRead: number
   isStarred: number
+  isArchived: number
+  isDeleted: number
+  threadId: string | null
+  count?: number
+  unreadCount?: number
   todoCount: number
+}
+
+interface Label {
+  id: number
+  name: string
+  color: string
+  parentId: number | null
 }
 
 function MailsContent() {
   const searchParams = useSearchParams()
   const initialFolder = searchParams.get('folder') || 'inbox'
   const initialSearch = searchParams.get('search') || ''
+  const initialLabelId = searchParams.get('labelId') || ''
 
   const [messages, setMessages] = useState<Message[]>([])
   const [folder, setFolder] = useState(initialFolder)
   const [search, setSearch] = useState(initialSearch)
+  const [labelId, setLabelId] = useState(initialLabelId)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
-  const [relatedTodos, setRelatedTodos] = useState<Array<{ id: number; title: string; dueDate: string | null; priority: string | null; status: string }>>([])
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [lastClickedIndex, setLastClickedIndex] = useState<number | null>(null)
+  const [viewMode, setViewMode] = useState<'flat' | 'thread'>('thread')
+  const [relatedTodos, setRelatedTodos] = useState<Array<{ id: number; title: string; dueDate: string | null; priority: string | null; status: string; sourceMessageId?: string }>>([])
+  const [labels, setLabels] = useState<Label[]>([])
+  const [msgLabels, setMsgLabels] = useState<Record<number, Label[]>>({})
+
+  // 加载标签列表
+  useEffect(() => {
+    fetch('/api/labels?accountId=1')
+      .then((r) => r.json())
+      .then((d) => setLabels(d.labels || []))
+      .catch(() => {})
+  }, [])
 
   const fetchMessages = useCallback(async () => {
     try {
       const params = new URLSearchParams()
-      if (folder === 'drafts') {
+      if (viewMode === 'thread' && folder === 'inbox') {
+        params.set('thread', 'group')
+      } else if (folder === 'drafts') {
         params.set('direction', 'draft')
       } else if (folder === 'sent') {
         params.set('direction', 'out')
@@ -46,15 +75,17 @@ function MailsContent() {
         params.set('direction', 'in')
         if (folder === 'unread') params.set('unread', 'true')
         if (folder === 'starred') params.set('starred', 'true')
+        if (folder === 'snoozed') params.set('snoozed', 'true')
       }
       if (search) params.set('search', search)
+      if (labelId) params.set('labelId', labelId)
       const res = await fetch(`/api/messages?${params}`)
       const data = await res.json()
       if (res.ok) setMessages(data.messages)
     } catch (err) {
       console.error('Failed to fetch messages:', err)
     }
-  }, [search, folder])
+  }, [search, folder, labelId, viewMode])
 
   useEffect(() => {
     fetchMessages()
@@ -63,7 +94,8 @@ function MailsContent() {
   useEffect(() => {
     setFolder(initialFolder)
     setSearch(initialSearch)
-  }, [initialFolder, initialSearch])
+    setLabelId(initialLabelId)
+  }, [initialFolder, initialSearch, initialLabelId])
 
   const handleSelectMessage = async (msg: Message) => {
     setSelectedId(msg.id)
@@ -78,12 +110,41 @@ function MailsContent() {
         const todoRes = await fetch('/api/todos?status=all')
         const todoData = await todoRes.json()
         if (todoData.todos) {
-          setRelatedTodos(todoData.todos.filter((t: Message & { sourceMessageId?: string }) => t.messageId === data.message.messageId))
+          setRelatedTodos(todoData.todos.filter((t: { sourceMessageId?: string }) => t.sourceMessageId === data.message.messageId))
         }
+        // TODO: 后续加 /api/messages/[id]/labels 端点后显示标签
       }
     } catch {
       // ignore
     }
+  }
+
+  const toggleSelect = (id: number, index: number, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+    setLastClickedIndex(index)
+  }
+
+  const handleRowClick = (msg: Message, index: number, e: React.MouseEvent) => {
+    // Shift+click 范围选
+    if (e.shiftKey && lastClickedIndex !== null) {
+      const start = Math.min(lastClickedIndex, index)
+      const end = Math.max(lastClickedIndex, index)
+      const rangeIds = messages.slice(start, end + 1).map((m) => m.id)
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        rangeIds.forEach((id) => next.add(id))
+        return next
+      })
+      return
+    }
+    // 普通点击：选中邮件查看
+    handleSelectMessage(msg)
   }
 
   const handleToggleStar = async (id: number, current: number, e: React.MouseEvent) => {
@@ -101,11 +162,39 @@ function MailsContent() {
     e.stopPropagation()
     await fetch(`/api/messages/${id}`, { method: 'DELETE' })
     setMessages((prev) => prev.filter((m) => m.id !== id))
+    setSelectedIds((prev) => { const n = new Set(prev); n.delete(id); return n })
     emitRefresh()
     if (selectedId === id) {
       setSelectedId(null)
       setSelectedMessage(null)
     }
+  }
+
+  const handleBatchAction = async (action: string, extra?: Record<string, any>) => {
+    const ids = Array.from(selectedIds)
+    if (ids.length === 0) return
+    const body: any = { messageIds: ids, action, ...extra }
+
+    const res = await fetch('/api/messages/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+
+    if (res.ok) {
+      setSelectedIds(new Set())
+      emitRefresh()
+      fetchMessages()
+    }
+  }
+
+  const handleSnoozeClick = async (id: number, e: React.MouseEvent) => {
+    e.stopPropagation()
+    // 默认延后到明天上午 9 点
+    const tomorrow9 = new Date()
+    tomorrow9.setDate(tomorrow9.getDate() + 1)
+    tomorrow9.setHours(9, 0, 0, 0)
+    await handleBatchAction('snooze', { until: tomorrow9.getTime() })
   }
 
   const formatDate = (dateStr: string | null) => {
@@ -127,25 +216,47 @@ function MailsContent() {
   const getAvatarColor = (id: number) => avatarColors[id % avatarColors.length]
 
   const folderLabel: Record<string, string> = {
-    inbox: '收件箱', unread: '未读', starred: '红旗', drafts: '草稿箱', sent: '已发送',
+    inbox: '收件箱', unread: '未读', starred: '红旗', drafts: '草稿箱', sent: '已发送', snoozed: '已延后',
   }
 
   return (
     <div className="flex h-full">
       {/* 中间栏：邮件列表 */}
-      <div className="flex w-[340px] shrink-0 flex-col border-r border-border bg-card">
+      <div className="flex w-[360px] shrink-0 flex-col border-r border-border bg-card">
+        {/* 工具栏 */}
         <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
           <span className="text-sm font-medium text-foreground">
             {folderLabel[folder] || '收件箱'}{messages.length > 0 ? ` · ${messages.length}` : ''}
           </span>
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="搜索..."
-            className="w-32 rounded border border-border bg-input px-2 py-1 text-xs text-foreground outline-none placeholder:text-muted-foreground focus:border-primary"
-          />
+          <div className="flex items-center gap-1">
+            {/* 视图切换 */}
+            <button
+              onClick={() => setViewMode(v => v === 'thread' ? 'flat' : 'thread')}
+              className="rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground"
+              title={viewMode === 'thread' ? '切换平铺' : '切换会话'}
+            >
+              {viewMode === 'thread' ? '🧵' : '📄'}
+            </button>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="搜索..."
+              className="w-28 rounded border border-border bg-input px-2 py-1 text-xs text-foreground outline-none placeholder:text-muted-foreground focus:border-primary"
+            />
+          </div>
         </div>
+
+        {/* 批量工具栏 */}
+        {selectedIds.size > 0 && (
+          <div className="flex items-center gap-1 border-b border-primary/20 bg-primary/5 px-3 py-1.5">
+            <span className="mr-1 text-[10px] text-primary">{selectedIds.size} 封</span>
+            <button onClick={() => handleBatchAction('archive')} className="rounded px-1.5 py-0.5 text-[10px] text-foreground hover:bg-accent">归档</button>
+            <button onClick={() => handleBatchAction('delete')} className="rounded px-1.5 py-0.5 text-[10px] text-destructive hover:bg-destructive/10">删除</button>
+            <button onClick={() => handleBatchAction('markRead', { value: true })} className="rounded px-1.5 py-0.5 text-[10px] text-foreground hover:bg-accent">已读</button>
+            <button onClick={() => handleBatchAction('star', { value: true })} className="rounded px-1.5 py-0.5 text-[10px] text-foreground hover:bg-accent">⭐</button>
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto">
           {messages.length === 0 && (
@@ -155,14 +266,23 @@ function MailsContent() {
               <p className="mt-1 text-xs">点击侧边栏刷新按钮拉取新邮件</p>
             </div>
           )}
-          {messages.map((msg) => (
+          {messages.map((msg, idx) => (
             <div
               key={msg.id}
-              onClick={() => handleSelectMessage(msg)}
-              className={`flex cursor-pointer gap-3 border-b border-border/50 px-4 py-3 transition-colors hover:bg-accent/50 ${
+              onClick={(e) => handleRowClick(msg, idx, e)}
+              className={`flex cursor-pointer gap-2 border-b border-border/50 px-3 py-3 transition-colors hover:bg-accent/50 ${
                 selectedId === msg.id ? 'bg-accent' : ''
-              } ${!msg.isRead ? 'bg-primary/5' : ''}`}
+              } ${!msg.isRead ? 'bg-primary/5' : ''} ${selectedIds.has(msg.id) ? 'ring-1 ring-inset ring-primary' : ''}`}
             >
+              {/* 多选复选框 */}
+              <input
+                type="checkbox"
+                checked={selectedIds.has(msg.id)}
+                onChange={(e) => { e.stopPropagation(); toggleSelect(msg.id, idx, e as any) }}
+                onClick={(e) => e.stopPropagation()}
+                className="mt-1 h-3.5 w-3.5 shrink-0 rounded accent-primary"
+              />
+
               <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${getAvatarColor(msg.id)}`}>
                 {getAvatar(msg.from)}
               </div>
@@ -182,6 +302,12 @@ function MailsContent() {
                     {msg.body?.substring(0, 60) || '(无预览)'}
                   </p>
                   <div className="flex shrink-0 items-center gap-1">
+                    {/* 会话计数 */}
+                    {msg.count && msg.count > 1 && (
+                      <span className="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
+                        {msg.count}
+                      </span>
+                    )}
                     {msg.todoCount > 0 && (
                       <span className="rounded bg-primary/20 px-1 py-0.5 text-[10px] text-primary">
                         {msg.todoCount}待办
@@ -205,6 +331,40 @@ function MailsContent() {
             <div className="flex items-center justify-between border-b border-border px-6 py-3">
               <h1 className="text-lg font-bold text-foreground">{selectedMessage.subject || '(无主题)'}</h1>
               <div className="flex items-center gap-2">
+                {/* 转待办 */}
+                <button
+                  onClick={async () => {
+                    await fetch(`/api/messages/${selectedMessage.id}/todo`, { method: 'POST' })
+                    emitRefresh()
+                    // 刷新关联待办
+                    const todoRes = await fetch('/api/todos?status=all')
+                    const todoData = await todoRes.json()
+                    if (todoData.todos) {
+                      setRelatedTodos(todoData.todos.filter((t: { sourceMessageId?: string }) => t.sourceMessageId === selectedMessage.messageId))
+                    }
+                  }}
+                  className="rounded-md border border-border px-3 py-1.5 text-sm text-foreground transition-colors hover:bg-accent"
+                >
+                  📋 转待办
+                </button>
+                {/* Snooze */}
+                <button
+                  onClick={async () => {
+                    const tomorrow9 = new Date()
+                    tomorrow9.setDate(tomorrow9.getDate() + 1)
+                    tomorrow9.setHours(9, 0, 0, 0)
+                    await fetch(`/api/messages/${selectedMessage.id}/snooze`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ until: tomorrow9.getTime() }),
+                    })
+                    emitRefresh()
+                    fetchMessages()
+                  }}
+                  className="rounded-md border border-border px-3 py-1.5 text-sm text-foreground transition-colors hover:bg-accent"
+                >
+                  ⏰ 延后
+                </button>
                 <Link
                   href={`/compose?to=${encodeURIComponent(selectedMessage.from || '')}&subject=${encodeURIComponent(selectedMessage.subject || '')}&messageId=${encodeURIComponent(selectedMessage.messageId)}&originalBody=${encodeURIComponent(selectedMessage.body || '')}`}
                   className="rounded-md border border-border px-3 py-1.5 text-sm text-foreground transition-colors hover:bg-accent"
@@ -226,6 +386,17 @@ function MailsContent() {
               </div>
             </div>
 
+            {/* 详情页标签 */}
+            {msgLabels[selectedMessage.id]?.length > 0 && (
+              <div className="flex items-center gap-1 border-b border-border px-6 py-1.5">
+                {msgLabels[selectedMessage.id].map((l) => (
+                  <span key={l.id} className="rounded-full px-2 py-0.5 text-[10px] text-white" style={{ backgroundColor: l.color }}>
+                    {l.name}
+                  </span>
+                ))}
+              </div>
+            )}
+
             <div className="border-b border-border px-6 py-3">
               <div className="flex items-center gap-3">
                 <div className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white ${getAvatarColor(selectedMessage.id)}`}>
@@ -242,7 +413,7 @@ function MailsContent() {
 
             {relatedTodos.length > 0 && (
               <div className="border-b border-primary/20 bg-primary/5 px-6 py-3">
-                <p className="mb-2 text-xs font-medium text-primary">📋 从此邮件提取的待办 ({relatedTodos.length})</p>
+                <p className="mb-2 text-xs font-medium text-primary">📋 关联待办 ({relatedTodos.length})</p>
                 <div className="space-y-1">
                   {relatedTodos.map((todo) => (
                     <div key={todo.id} className="flex items-center gap-2 text-sm">

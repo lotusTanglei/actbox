@@ -3,8 +3,9 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
+import { SavedSearches } from '@/components/search/SavedSearches'
 
 interface SidebarProps {
   unreadCount?: number
@@ -53,6 +54,7 @@ const PROVIDER_BADGE: Record<string, { badge: string; color: string }> = {
 
 export function Sidebar({ unreadCount = 0, todoPendingCount = 0, onSearch, onRefresh }: SidebarProps) {
   const pathname = usePathname()
+  const router = useRouter()
   const [search, setSearch] = useState('')
   const [collapsedFolders, setCollapsedFolders] = useState(false)
   const [accounts, setAccounts] = useState<AccountLite[]>([])
@@ -85,11 +87,6 @@ export function Sidebar({ unreadCount = 0, todoPendingCount = 0, onSearch, onRef
   const isActive = (href: string) =>
     pathname === href || (href !== '/' && pathname.startsWith(href))
 
-  const handleSearch = (value: string) => {
-    setSearch(value)
-    onSearch?.(value)
-  }
-
   return (
     <aside className="flex h-screen w-56 shrink-0 flex-col border-r border-border bg-sidebar">
       {/* Logo */}
@@ -116,7 +113,12 @@ export function Sidebar({ unreadCount = 0, todoPendingCount = 0, onSearch, onRef
           <input
             type="text"
             value={search}
-            onChange={(e) => handleSearch(e.target.value)}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && search.trim()) {
+                router.push(`/search?q=${encodeURIComponent(search.trim())}`)
+              }
+            }}
             placeholder="搜索邮件"
             className="w-full rounded-md border border-border bg-input py-1.5 pl-8 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-primary"
           />
@@ -228,6 +230,9 @@ export function Sidebar({ unreadCount = 0, todoPendingCount = 0, onSearch, onRef
             )
           })}
         </div>
+
+        {/* Saved Search(常驻)—— plan-07 Task 8 */}
+        <SavedSearches />
       </div>
 
       {/* 底部：写邮件 + 设置 */}

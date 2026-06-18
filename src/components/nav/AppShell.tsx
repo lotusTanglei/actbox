@@ -8,6 +8,7 @@ import { Sidebar } from './Sidebar'
 import { onRefresh } from '@/lib/refresh-bus'
 import { useMailEvents } from '@/components/realtime/useMailEvents'
 import { Notifications } from '@/components/realtime/Notifications'
+import { SearchBar } from '@/components/search/SearchBar'
 
 interface AppShellProps {
   children: React.ReactNode
@@ -70,19 +71,20 @@ export function AppShell({ children }: AppShellProps) {
     }
   }
 
-  const handleSearch = (query: string) => {
-    router.push(`/mails?search=${encodeURIComponent(query)}`)
-  }
-
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar
-        unreadCount={unreadCount}
-        todoPendingCount={todoPendingCount}
-        onRefresh={handleRefresh}
-        onSearch={handleSearch}
-      />
-      <main className="flex-1 overflow-hidden">{children}</main>
+    <div className="flex h-screen flex-col overflow-hidden">
+      {/* 顶部搜索栏 — plan-07 Task 8 */}
+      <header className="flex items-center justify-center border-b border-border bg-sidebar px-4 py-2">
+        <SearchBar />
+      </header>
+      <div className="flex flex-1 overflow-hidden">
+        <Sidebar
+          unreadCount={unreadCount}
+          todoPendingCount={todoPendingCount}
+          onRefresh={handleRefresh}
+        />
+        <main className="flex-1 overflow-hidden">{children}</main>
+      </div>
       <Notifications />
     </div>
   )

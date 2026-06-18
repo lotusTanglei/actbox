@@ -31,6 +31,7 @@ export const messages = sqliteTable('messages', {
   recipient: text('recipient'), // 旧列保留兼容（回填到 to，见 backfill）
   body: text('body'), // 清洗后全文纯文本（不再截断，见 plan-01 Task 4）
   bodyHtml: text('body_html'), // HTML 原文（完整渲染）
+  bodyHtmlText: text('body_html_text'), // body_html 去标签纯文本,供 FTS 索引（plan-07 Task 2）
   accountId: integer('account_id'),
   folder: text('folder').notNull().default('INBOX'),
   imapUid: integer('imap_uid'),

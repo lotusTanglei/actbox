@@ -9,6 +9,7 @@ import { getAdapter, listActiveAccountIds, ensureBootstrapAccount } from '@/lib/
 import { getAttachmentsRoot } from '@/lib/attachments/store'
 import { splitAddresses, validateRecipients } from '@/lib/mail/recipients'
 import { buildForward } from '@/lib/mail/forward'
+import { htmlToText } from '@/lib/db/body-html-text'
 
 /** 把客户端传来的相对 storagePath 解析为绝对路径,且必须落在 attachments/tmp/ 内(防穿越,避免 nodemailer 读任意文件)。 */
 function resolveAttachmentPath(storagePath: string): string {
@@ -112,6 +113,7 @@ export async function POST(request: NextRequest) {
         bcc: bcc || null,
         body: mailBody,
         bodyHtml: bodyHtml || null,
+        bodyHtmlText: bodyHtml ? htmlToText(bodyHtml) : null,
         direction: 'out',
         isRead: true,
         accountId: accId,

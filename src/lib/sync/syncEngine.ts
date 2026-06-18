@@ -11,6 +11,7 @@ import { getAdapter, listActiveAccountIds, ensureBootstrapAccount } from '@/lib/
 import { extractTodos } from '@/lib/extractor'
 import { extractAttachments } from '@/lib/attachments/extract'
 import { getAttachmentsRoot } from '@/lib/attachments/store'
+import { htmlToText } from '@/lib/db/body-html-text'
 
 type Db = ReturnType<typeof getDb>
 
@@ -116,6 +117,7 @@ async function syncOneAccount(accountId: number, db: Db): Promise<AccountSyncRes
           cc: msg.cc ?? null,
           body,
           bodyHtml: msg.bodyHtml || null,
+          bodyHtmlText: msg.bodyHtml ? htmlToText(msg.bodyHtml) : null,
           receivedAt: msg.receivedAt,
           accountId,
           folder: msg.folder || 'INBOX',

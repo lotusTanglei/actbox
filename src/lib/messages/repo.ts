@@ -3,6 +3,7 @@
 // incrementalSync 等实时模块用。plan-06 Task 3。
 
 import type Database from 'better-sqlite3'
+import { htmlToText } from '@/lib/db/body-html-text'
 
 export interface MessageUpsert {
   messageId: string
@@ -23,14 +24,15 @@ export interface MessageUpsert {
 export function upsertMessage(db: Database.Database, m: MessageUpsert): boolean {
   const now = Math.floor(Date.now() / 1000)
   const received = m.receivedAt ? Math.floor(new Date(m.receivedAt as string | Date).getTime() / 1000) : null
+  const bodyHtmlText = m.bodyHtml ? htmlToText(m.bodyHtml) : null
   const existing = db.prepare('SELECT id FROM messages WHERE message_id = ?').get(m.messageId)
   db.prepare(
     `INSERT INTO messages
-       (message_id, subject, sender, "to", cc, bcc, body, body_html, received_at, processed_at, direction, account_id, folder, imap_uid)
+       (message_id, subject, sender, "to", cc, bcc, body, body_html, body_html_text, received_at, processed_at, direction, account_id, folder, imap_uid)
      VALUES (?,?,?,?,?,?,?,?,?,?,'in',?,?,?)
      ON CONFLICT(message_id) DO UPDATE SET
        subject=excluded.subject, sender=excluded.sender, "to"=excluded."to", cc=excluded.cc, bcc=excluded.bcc,
-       body=excluded.body, body_html=excluded.body_html, received_at=excluded.received_at,
+       body=excluded.body, body_html=excluded.body_html, body_html_text=excluded.body_html_text, received_at=excluded.received_at,
        account_id=excluded.account_id, folder=excluded.folder, imap_uid=excluded.imap_uid`,
   ).run(
     m.messageId,
@@ -41,6 +43,7 @@ export function upsertMessage(db: Database.Database, m: MessageUpsert): boolean 
     m.bcc ?? null,
     m.body ?? null,
     m.bodyHtml ?? null,
+    bodyHtmlText,
     received,
     now,
     m.accountId ?? null,

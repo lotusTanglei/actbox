@@ -9,7 +9,10 @@ function memDb() {
   db.exec(`CREATE TABLE messages (id INTEGER PRIMARY KEY, message_id TEXT, account_id INTEGER, subject TEXT, sender TEXT, body TEXT, body_html TEXT, folder TEXT, imap_uid INTEGER, is_read INTEGER DEFAULT 0, todo_count INTEGER DEFAULT 0)`)
   db.exec(`CREATE TABLE labels (id INTEGER PRIMARY KEY, account_id INTEGER, name TEXT, color TEXT)`)
   db.exec(`CREATE TABLE message_labels (message_id INTEGER, label_id INTEGER, PRIMARY KEY(message_id, label_id))`)
-  db.exec(`CREATE TABLE rules (id INTEGER PRIMARY KEY, account_id INTEGER, name TEXT, enabled INTEGER DEFAULT 1, conditions TEXT, actions TEXT, "order" INTEGER DEFAULT 0, kind TEXT DEFAULT 'normal')`)
+  db.exec(`CREATE TABLE rules (id INTEGER PRIMARY KEY, account_id INTEGER, name TEXT, enabled INTEGER DEFAULT 1, conditions TEXT, actions TEXT, "order" INTEGER DEFAULT 0, kind TEXT DEFAULT 'normal', created_at INTEGER)`)
+  db.exec(`CREATE TABLE attachments (id INTEGER PRIMARY KEY, message_id INTEGER, size INTEGER)`)
+  db.exec(`CREATE TABLE folders (account_id INTEGER, path TEXT, display_name TEXT, type TEXT)`)
+  db.exec(`INSERT INTO folders (account_id, path, display_name, type) VALUES (1, 'Archive', '归档', 'archive')`)
   db.exec(`CREATE TABLE todos (id INTEGER PRIMARY KEY, title TEXT, source_message_id TEXT, source_subject TEXT, source_from TEXT)`)
   return db
 }

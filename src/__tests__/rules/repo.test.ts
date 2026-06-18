@@ -5,7 +5,7 @@ import { createRule, listRules, updateRule, deleteRule, setEnabled, reorderRules
 
 function memDb() {
   const db = new Database(':memory:')
-  db.exec(`CREATE TABLE rules (id INTEGER PRIMARY KEY AUTOINCREMENT, account_id INTEGER NOT NULL, name TEXT NOT NULL, enabled INTEGER DEFAULT 1, conditions TEXT NOT NULL, actions TEXT NOT NULL, "order" INTEGER DEFAULT 0, kind TEXT DEFAULT 'normal')`)
+  db.exec(`CREATE TABLE rules (id INTEGER PRIMARY KEY AUTOINCREMENT, account_id INTEGER NOT NULL, name TEXT NOT NULL, enabled INTEGER DEFAULT 1, conditions TEXT NOT NULL, actions TEXT NOT NULL, "order" INTEGER DEFAULT 0, kind TEXT DEFAULT 'normal', created_at INTEGER)`)
   return db
 }
 

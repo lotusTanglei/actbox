@@ -5,7 +5,7 @@ import { addToList, listWhitelist, listBlacklist, removeFromList, isWhitelisted 
 
 function memDb() {
   const db = new Database(':memory:')
-  db.exec(`CREATE TABLE rules (id INTEGER PRIMARY KEY AUTOINCREMENT, account_id INTEGER, name TEXT, enabled INTEGER DEFAULT 1, conditions TEXT, actions TEXT, "order" INTEGER DEFAULT 0, kind TEXT DEFAULT 'normal')`)
+  db.exec(`CREATE TABLE rules (id INTEGER PRIMARY KEY AUTOINCREMENT, account_id INTEGER, name TEXT, enabled INTEGER DEFAULT 1, conditions TEXT, actions TEXT, "order" INTEGER DEFAULT 0, kind TEXT DEFAULT 'normal', created_at INTEGER)`)
   return db
 }
 

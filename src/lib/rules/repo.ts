@@ -2,8 +2,8 @@
 import type { ConditionGroup, RuleAction, RuleKind, Rule } from './types'
 
 export function createRule(db: any, input: { accountId: number; name: string; conditions: ConditionGroup; actions: RuleAction[]; order: number; kind?: RuleKind; enabled?: boolean }): number {
-  const res = db.prepare(`INSERT INTO rules (account_id, name, enabled, conditions, actions, "order", kind) VALUES (?,?,?,?,?,?,?)`).run(
-    input.accountId, input.name, input.enabled === false ? 0 : 1, JSON.stringify(input.conditions), JSON.stringify(input.actions), input.order, input.kind ?? 'normal')
+  const res = db.prepare(`INSERT INTO rules (account_id, name, enabled, conditions, actions, "order", kind, created_at) VALUES (?,?,?,?,?,?,?,?)`).run(
+    input.accountId, input.name, input.enabled === false ? 0 : 1, JSON.stringify(input.conditions), JSON.stringify(input.actions), input.order, input.kind ?? 'normal', Math.floor(Date.now() / 1000))
   return Number(res.lastInsertRowid)
 }
 

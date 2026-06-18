@@ -19,12 +19,16 @@ function freshDb() {
 
 import { GET, POST } from '@/app/api/outbox/route'
 
+function req(url: string, body: object) {
+  return new Request(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }) as any
+}
+
 describe('POST /api/outbox', () => {
   beforeEach(() => freshDb())
 
   it('undo 模式:scheduledAt = now + undoWindow(默认10s)', async () => {
     const before = Date.now()
-    const res = await POST(new Request('http://x/api/outbox', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ to: 'a@b', subject: 'S', bodyHtml: '<p>x</p>', sendMode: 'undo' }) }))
+    const res = await POST(req('http://x/api/outbox', { to: 'a@b', subject: 'S', bodyHtml: '<p>x</p>', sendMode: 'undo' }))
     expect(res.status).toBe(201)
     const j = await res.json()
     expect(j.scheduledAt).toBeGreaterThanOrEqual(before + 9000)
@@ -34,15 +38,15 @@ describe('POST /api/outbox', () => {
   it('undoWindow 可配(settings 20s)', async () => {
     mockDb.prepare("INSERT INTO settings (key,value) VALUES ('outbox.undoWindowSeconds','20')").run()
     const before = Date.now()
-    const j = await (await POST(new Request('http://x/api/outbox', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ to: 'a@b', subject: 'S', bodyHtml: 'x' }) }))).json()
+    const j = await (await POST(req('http://x/api/outbox', { to: 'a@b', subject: 'S', bodyHtml: 'x' }))).json()
     expect(j.scheduledAt).toBeGreaterThanOrEqual(before + 19000)
   })
   it('schedule 过去时间 → 400', async () => {
-    const res = await POST(new Request('http://x/api/outbox', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ to: 'a@b', subject: 'S', bodyHtml: 'x', sendMode: 'schedule', scheduledAt: { date: '2020-01-01', time: '00:00' } }) }))
+    const res = await POST(req('http://x/api/outbox', { to: 'a@b', subject: 'S', bodyHtml: 'x', sendMode: 'schedule', scheduledAt: { date: '2020-01-01', time: '00:00' } }))
     expect(res.status).toBe(400)
   })
   it('缺 to → 400', async () => {
-    const res = await POST(new Request('http://x/api/outbox', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ subject: 'S', bodyHtml: 'x' }) }))
+    const res = await POST(req('http://x/api/outbox', { subject: 'S', bodyHtml: 'x' }))
     expect(res.status).toBe(400)
   })
 })

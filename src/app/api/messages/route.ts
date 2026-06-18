@@ -6,6 +6,7 @@ import { messages } from '@/lib/db/schema'
 import { eq, desc, and, or, like, not, sql } from 'drizzle-orm'
 import { parseQuery } from '@/lib/search/query-parser'
 import { searchMessages, type SearchSort } from '@/lib/search/fts'
+import { decodeCursor, clampLimit, encodeCursor } from '@/lib/messages/cursor'
 
 /** GET /api/messages — 邮件列表/搜索。q|search 非空走 FTS5(跨文件夹/账号);否则结构化过滤。 */
 export async function GET(request: NextRequest) {
@@ -101,85 +102,58 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ messages: results })
     }
 
-    // 基础条件：不删除
-    const conditions = [not(eq(messages.isDeleted, true))]
+    // ── 游标分页 ──
+    const limit = clampLimit(searchParams.get('limit') ? Number(searchParams.get('limit')) : undefined)
+    const cursorTok = searchParams.get('cursor')
+    if (cursorTok !== null && cursorTok !== '' && decodeCursor(cursorTok) === null) {
+      return NextResponse.json({ error: 'invalid cursor' }, { status: 400 })
+    }
+    const cursor = cursorTok ? decodeCursor(cursorTok) : null
 
-    // 排除未到期 snoozed（除非显式看延后视图）。plan-08 Task 7
+    // 构造 WHERE 条件(raw SQL)
+    const wheres: string[] = ['is_deleted = 0']
+    const params: any[] = []
+
     if (showSnoozed !== 'true') {
-      conditions.push(
-        or(
-          sql`${messages.snoozedUntil} IS NULL`,
-          sql`${messages.snoozedUntil} <= ${Math.floor(Date.now() / 1000)}`,
-        )!
-      )
+      wheres.push('(snoozed_until IS NULL OR snoozed_until <= ?)')
+      params.push(Math.floor(Date.now() / 1000))
     }
+    if (direction === 'in') wheres.push("direction = 'in'")
+    else if (direction === 'out') wheres.push("direction = 'out'")
+    else if (direction === 'draft') wheres.push("direction = 'draft'")
+    if (labelId) { wheres.push('id IN (SELECT message_id FROM message_labels WHERE label_id = ?)'); params.push(Number(labelId)) }
+    if (unread === 'true') wheres.push('is_read = 0')
+    if (starred === 'true') wheres.push('is_starred = 1')
+    if (spam === 'true') wheres.push('is_spam = 1')
+    if (search) { wheres.push('(subject LIKE ? OR sender LIKE ? OR body LIKE ?)'); const kw = `%${search}%`; params.push(kw, kw, kw) }
+    if (cursor) { wheres.push('(received_at < ? OR (received_at = ? AND id < ?))'); params.push(cursor.receivedAt, cursor.receivedAt, cursor.id) }
 
-    // 方向筛选（精确：out 仅已发送，draft 仅草稿）
-    if (direction === 'in') {
-      conditions.push(eq(messages.direction, 'in'))
-    } else if (direction === 'out') {
-      conditions.push(eq(messages.direction, 'out'))
-    } else if (direction === 'draft') {
-      conditions.push(eq(messages.direction, 'draft'))
-    }
+    const whereSql = wheres.join(' AND ')
+    params.push(limit + 1) // 多取 1 行判断是否有下一页
 
-    // 按标签过滤。plan-08 Task 7
-    if (labelId) {
-      conditions.push(
-        sql`${messages.id} IN (SELECT message_id FROM message_labels WHERE label_id = ${Number(labelId)})`,
-      )
-    }
+    const rows = rawDb.prepare(
+      `SELECT id, message_id, subject, sender, recipient, body, body_html,
+              received_at, direction, is_read, is_starred, todo_count, thread_id,
+              is_spam, is_external, auth_result, spam_score
+       FROM messages WHERE ${whereSql}
+       ORDER BY received_at DESC, id DESC LIMIT ?`
+    ).all(...params) as any[]
 
-    // 未读筛选
-    if (unread === 'true') {
-      conditions.push(eq(messages.isRead, false))
-    }
+    const hasMore = rows.length > limit
+    const page = hasMore ? rows.slice(0, limit) : rows
+    const nextCursor = hasMore && page.length > 0
+      ? encodeCursor(Number(page[page.length - 1].received_at), Number(page[page.length - 1].id))
+      : null
 
-    // 星标筛选
-    if (starred === 'true') {
-      conditions.push(eq(messages.isStarred, true))
-    }
-
-    // 垃圾邮件筛选
-    if (spam === 'true') {
-      conditions.push(eq(messages.isSpam, true))
-    }
-
-    // 搜索
-    if (search) {
-      const keyword = `%${search}%`
-      conditions.push(
-        or(
-          like(messages.subject, keyword),
-          like(messages.from, keyword),
-          like(messages.body, keyword)
-        )!
-      )
-    }
-
-    const result = db
-      .select()
-      .from(messages)
-      .where(and(...conditions))
-      .orderBy(desc(messages.receivedAt))
-      .all()
-
-    // 统计未读数
-    const unreadResult = db
-      .select({ count: sql<number>`count(*)` })
-      .from(messages)
-      .where(
-        and(
-          eq(messages.direction, 'in'),
-          eq(messages.isRead, false),
-          not(eq(messages.isDeleted, true))
-        )
-      )
-      .all()
+    // 未读总数(不分页,轻查询)
+    const unreadRow = rawDb.prepare(
+      "SELECT count(*) c FROM messages WHERE direction='in' AND is_read=0 AND is_deleted=0"
+    ).get() as any
 
     return NextResponse.json({
-      messages: result,
-      unreadCount: unreadResult[0]?.count || 0,
+      messages: page,
+      nextCursor,
+      unreadCount: unreadRow?.c || 0,
     })
   } catch (error) {
     console.error('[/api/messages GET] Error:', error)

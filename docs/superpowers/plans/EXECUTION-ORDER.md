@@ -106,7 +106,7 @@
 - [ ] plan-14 效率与体验（虚拟列表/快捷键/worker）
 - [ ] plan-15 设置中心统一化
 - [ ] plan-16 日历与日程
-- [ ] plan-18 导出待办 → Obsidian
+- [x] plan-18 导出待办 → Obsidian ✅
 
 ---
 

@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { SavedSearches } from '@/components/search/SavedSearches'
+import { ThemeToggle } from '@/components/theme/ThemeToggle'
 
 interface SidebarProps {
   unreadCount?: number
@@ -318,6 +319,11 @@ export function Sidebar({ unreadCount = 0, todoPendingCount = 0, onSearch, onRef
           </svg>
           设置
         </Link>
+      </div>
+
+      {/* 主题切换 */}
+      <div className="border-t border-border p-2">
+        <ThemeToggle />
       </div>
     </aside>
   )

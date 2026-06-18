@@ -3,10 +3,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/lib/db', () => {
-  // 结构化路径用 drizzle 链式调用,提供最小可链 stub
-  const where = () => ({ orderBy: () => ({ all: () => [] }), all: () => [{ count: 0 }] })
-  const chain = { select: () => ({ from: () => ({ where }) }) }
-  return { getDb: () => chain, getRawDb: () => ({}) }
+  // minimal rawDb stub: prepare → get → all 返回空
+  return {
+    getDb: () => ({}),
+    getRawDb: () => ({
+      prepare: () => ({
+        all: () => [],
+        get: () => ({ c: 0 }),
+      }),
+    }),
+  }
 })
 vi.mock('@/lib/search/fts', () => ({
   searchMessages: vi.fn().mockReturnValue([

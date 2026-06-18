@@ -57,3 +57,11 @@ export async function runBackfill(opts: {
 
   return { total: candidates.length, refilled, skipped, failed }
 }
+
+/** 存量库旧列 recipient → to 回填(子项目 5 Task 1)。幂等:to 已有值不动。 */
+export function backfillRecipientToTo(db: Database.Database): { refilled: number } {
+  const r = db
+    .prepare(`UPDATE messages SET "to" = recipient WHERE ("to" IS NULL OR "to" = '') AND recipient IS NOT NULL`)
+    .run()
+  return { refilled: r.changes }
+}

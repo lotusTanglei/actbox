@@ -11,6 +11,7 @@ import { splitAddresses, validateRecipients } from '@/lib/mail/recipients'
 import { buildForward } from '@/lib/mail/forward'
 import { htmlToText } from '@/lib/db/body-html-text'
 import { computeThreadId } from '@/lib/threads/assign'
+import { bumpFromMessage } from '@/lib/contacts/repo'
 
 /** 把客户端传来的相对 storagePath 解析为绝对路径,且必须落在 attachments/tmp/ 内(防穿越,避免 nodemailer 读任意文件)。 */
 function resolveAttachmentPath(storagePath: string): string {
@@ -141,6 +142,9 @@ export async function POST(request: NextRequest) {
         threadId,
       })
       .run()
+
+    // bump 联系人常用度（发信 → to/cc/bcc，失败不影响主流程）
+    try { bumpFromMessage(getRawDb(), { accountId: accId, to, cc, bcc }) } catch { /* 降级 */ }
 
     return NextResponse.json({ ok: true, messageId: result.messageId, accountId: accId })
   } catch (error) {

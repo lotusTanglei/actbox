@@ -2,6 +2,27 @@
 // 联系人/分组 CRUD + upsertByEmail + bumpContact。plan-09 Task 2。
 
 import type Database from 'better-sqlite3'
+import { parseAddresses } from '@/lib/contacts/parse-emails'
+
+/** 从邮件发件人/收件人 bump 常用度（收信 bump from；发信 bump to/cc/bcc）。失败不影响主流程 */
+export function bumpFromMessage(
+  db: Database.Database,
+  opts: { accountId: number; from?: string | null; to?: string | null; cc?: string | null; bcc?: string | null },
+): void {
+  try {
+    const addrs = [
+      ...(opts.from ? parseAddresses(opts.from) : []),
+      ...(opts.to ? parseAddresses(opts.to) : []),
+      ...(opts.cc ? parseAddresses(opts.cc) : []),
+      ...(opts.bcc ? parseAddresses(opts.bcc) : []),
+    ]
+    for (const a of addrs) {
+      try {
+        bumpContact(db, { accountId: opts.accountId, email: a.email, name: a.name })
+      } catch { /* 单条 bump 失败不阻断 */ }
+    }
+  } catch { /* 降级 */ }
+}
 
 /* ---------- 类型 ---------- */
 export interface ContactRow {

@@ -13,6 +13,7 @@ import { extractAttachments } from '@/lib/attachments/extract'
 import { getAttachmentsRoot } from '@/lib/attachments/store'
 import { htmlToText } from '@/lib/db/body-html-text'
 import { computeThreadId } from '@/lib/threads/assign'
+import { bumpFromMessage } from '@/lib/contacts/repo'
 
 type Db = ReturnType<typeof getDb>
 
@@ -151,6 +152,11 @@ async function syncOneAccount(accountId: number, db: Db): Promise<AccountSyncRes
         } catch (e) {
           console.error('[sync] attachment extract failed for', mid, e instanceof Error ? e.message : e)
         }
+      }
+
+      // bump 联系人常用度（收信 → from，失败不影响主流程）
+      if (dbMsgId) {
+        try { bumpFromMessage(rawDb, { accountId, from: msg.from }) } catch { /* 降级 */ }
       }
     }
 

@@ -8,8 +8,9 @@ import type Database from 'better-sqlite3'
 import type { MailAdapter } from '@/lib/adapter/types'
 import type { MailEvent } from '@/lib/events/types'
 import { recomputeUnread } from '@/lib/messages/repo'
+import { applyLabels } from '@/lib/labels/apply'
 
-export type WritebackAction = 'markRead' | 'star' | 'move' | 'archive' | 'restore' | 'delete'
+export type WritebackAction = 'markRead' | 'star' | 'move' | 'archive' | 'restore' | 'delete' | 'label' | 'unlabel'
 
 export interface ApplyActionOpts {
   adapter: MailAdapter
@@ -17,6 +18,7 @@ export interface ApplyActionOpts {
   messageIds: number[]
   value?: boolean
   targetFolder?: string
+  labelIds?: number[]
   /** 事件发布(状态变更 <10s 感知);缺省 noop(向后兼容)。plan-06 Task 7 */
   publish?: (ev: MailEvent) => void
 }
@@ -45,6 +47,16 @@ function resolveArchivePath(db: Database.Database, accountId: number): string {
 export async function applyAction(db: Database.Database, opts: ApplyActionOpts): Promise<void> {
   const { adapter, action, messageIds, value, targetFolder } = opts
   if (!messageIds?.length) return
+
+  // 标签是纯本地概念：直接操作 message_labels 表，无需回写 IMAP
+  if (action === 'label' && opts.labelIds?.length) {
+    applyLabels(db, { messageIds, labelIds: opts.labelIds, mode: 'attach' })
+    return
+  }
+  if (action === 'unlabel' && opts.labelIds?.length) {
+    applyLabels(db, { messageIds, labelIds: opts.labelIds, mode: 'detach' })
+    return
+  }
 
   const placeholders = messageIds.map(() => '?').join(',')
   const rows = db

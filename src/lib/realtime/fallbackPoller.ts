@@ -13,21 +13,17 @@ let task: ScheduledTask | null = null
 export function startFallbackPoller(intervalSec = 30): void {
   if (task) return
   const expr = `*/${Math.max(1, intervalSec)} * * * * *` // 6 字段(含秒)
-  task = cron.schedule(
-    expr,
-    async () => {
-      try {
-        const db = getRawDb()
-        await runFallbackPoll(db, {
-          getAdapter: (id) => getAdapter(id),
-          publish: (e) => eventBus.publish(e),
-        })
-      } catch (e) {
-        console.error('[fallbackPoller]', e instanceof Error ? e.message : e)
-      }
-    },
-    { runOnInit: false },
-  )
+  task = cron.schedule(expr, async () => {
+    try {
+      const db = getRawDb()
+      await runFallbackPoll(db, {
+        getAdapter: (id) => getAdapter(id),
+        publish: (e) => eventBus.publish(e),
+      })
+    } catch (e) {
+      console.error('[fallbackPoller]', e instanceof Error ? e.message : e)
+    }
+  })
 }
 
 export function stopFallbackPoller(): void {

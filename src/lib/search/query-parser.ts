@@ -47,22 +47,27 @@ export function parseQuery(raw: string): ParsedQuery {
       if (d) out[op] = d
       else free.push(tok)
     } else {
-      // from / to / subject
-      out[op] = val
+      // from / to / subject —— 去掉引号值的外层引号
+      out[op] = stripQuotes(val)
     }
   }
   out.freeText = free.join(' ').trim()
   return out
 }
 
+function stripQuotes(s: string): string {
+  return s.startsWith('"') && s.endsWith('"') ? s.slice(1, -1) : s
+}
+
 function tokenize(raw: string): string[] {
-  const re = /("(?:[^"\\]|\\.)*"|[^\s]+)/g
+  // 优先匹配 op:"带空格引号值",再匹配裸引号串,最后非空白
+  const re = /([a-zA-Z]+:"(?:[^"\\]|\\.)*")|("(?:[^"\\]|\\.)*")|([^\s]+)/g
   const out: string[] = []
   let m: RegExpExecArray | null
   while ((m = re.exec(raw)) !== null) {
-    // 去掉引号值的外层引号
-    const t = m[1]
-    out.push(t.startsWith('"') && t.endsWith('"') ? t.slice(1, -1) : t)
+    const t = m[0]
+    if (m[2]) out.push(t.slice(1, -1)) // 裸引号串 → 去引号进 freeText
+    else out.push(t)
   }
   return out
 }

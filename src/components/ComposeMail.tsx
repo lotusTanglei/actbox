@@ -2,11 +2,14 @@
 
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { htmlToText } from 'html-to-text'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { RichTextEditor } from '@/components/RichTextEditor'
+import { RecipientFields } from '@/components/RecipientFields'
+import { detectAttachmentMention } from '@/lib/mail/recipients'
+import { buildForward } from '@/lib/mail/forward'
 
 /** 上传端点返回的待发附件元数据 */
 export interface PendingAttachment {
@@ -14,31 +17,31 @@ export interface PendingAttachment {
   filename: string
   size: number
   mimeType: string
-  storagePath: string // 相对根(attachments/tmp/{sha}.bin)
-  cid?: string // 内联图片才有
+  storagePath: string
+  cid?: string
   isInline: boolean
 }
 
 interface ComposeMailProps {
-  /** 预填收件人 */
   to?: string
-  /** 预填主题 */
+  cc?: string
+  bcc?: string
   subject?: string
-  /** 预填正文（AI 草稿等） */
   initialBody?: string
-  /** 原始邮件 messageId（回复时引用） */
   replyToMessageId?: string
-  /** 原始邮件正文（AI 起草用） */
   originalBody?: string
-  /** 关联待办（AI 起草用） */
+  originalSubject?: string
+  originalFrom?: string
+  originalTo?: string
+  originalDate?: string
   todoContext?: string
-  /** 发送/保存后回调 */
+  /** 转发:源邮件 messageId(带则进入转发模式) */
+  forwardOfMessageId?: string
+  accountId?: number
   onDone?: () => void
-  /** 取消回调 */
   onCancel?: () => void
 }
 
-/** 纯文本（AI 起草结果）转 HTML 段落，便于塞进富文本编辑器 */
 function plainTextToHtml(text: string): string {
   return text
     .split(/\n{2,}/)
@@ -67,29 +70,117 @@ function iconFor(mime: string): string {
 
 export function ComposeMail({
   to: initialTo = '',
+  cc: initialCc = '',
+  bcc: initialBcc = '',
   subject: initialSubject = '',
   initialBody = '',
   replyToMessageId,
   originalBody,
+  originalSubject,
+  originalFrom,
+  originalTo,
+  originalDate,
   todoContext,
+  forwardOfMessageId,
+  accountId: propAccountId,
   onDone,
   onCancel,
 }: ComposeMailProps) {
   const [to, setTo] = useState(initialTo)
+  const [cc, setCc] = useState(initialCc)
+  const [bcc, setBcc] = useState(initialBcc)
   const [subject, setSubject] = useState(initialSubject)
   const [body, setBody] = useState(initialBody)
   const [attachments, setAttachments] = useState<PendingAttachment[]>([])
+  const [activeAccountId, setActiveAccountId] = useState<number | null>(propAccountId ?? null)
+  const [ownDomains, setOwnDomains] = useState<string[]>([])
   const [sending, setSending] = useState(false)
   const [drafting, setDrafting] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const keySeq = useRef(0)
+  const draftIdRef = useRef<number | null>(null)
+  const initedRef = useRef(false)
 
-  // 正文纯文本（用于校验/摘要/不支持 HTML 的客户端）；body 本身是 HTML
+  // 当前字段快照(供 debounced 自动保存闭包读取,避免 stale)
+  const fieldsRef = useRef({ to, cc, bcc, subject })
+  fieldsRef.current = { to, cc, bcc, subject }
+
   const plainBody = htmlToText(body).trim()
+  const mentionMissingAttachment = detectAttachmentMention(plainBody, attachments)
 
-  /** 上传单个文件到 /api/upload,返回待发元数据 */
+  // 初始化:签名注入 / 转发预填(各仅一次)
+  useEffect(() => {
+    if (initedRef.current) return
+    initedRef.current = true
+    ;(async () => {
+      // 转发模式:buildForward 预填
+      if (forwardOfMessageId && originalBody) {
+        const fwd = buildForward(
+          {
+            messageId: forwardOfMessageId,
+            subject: originalSubject || '',
+            from: originalFrom || '',
+            to: originalTo || '',
+            body: originalBody,
+            receivedAt: originalDate ? new Date(originalDate) : null,
+          },
+          { accountId: activeAccountId ?? 1 },
+        )
+        setBody(plainTextToHtml(fwd.body))
+        setSubject(fwd.subject)
+        return
+      }
+      // 空新邮件:注入签名(账号专用优先,回落全局)
+      if (!initialBody) {
+        try {
+          const accId = activeAccountId ?? (await firstActiveAccountId())
+          if (accId != null) {
+            setActiveAccountId(accId)
+            const sig = await fetchSignature(accId)
+            if (sig) setBody(sig)
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // 拉账号自有域(外部域提醒)+ 默认 accountId
+  useEffect(() => {
+    if (activeAccountId != null) return
+    ;(async () => {
+      const id = await firstActiveAccountId()
+      if (id) {
+        setActiveAccountId(id)
+        const email = await firstActiveEmail()
+        const domain = email?.split('@')[1]
+        if (domain) setOwnDomains([domain])
+      }
+    })()
+  }, [activeAccountId])
+
+  async function firstActiveAccountId(): Promise<number | null> {
+    const r = await fetch('/api/accounts')
+    const d = await r.json()
+    const active = (d.accounts || []).find((a: { isActive: boolean }) => a.isActive)
+    return active?.id ?? d.accounts?.[0]?.id ?? null
+  }
+  async function firstActiveEmail(): Promise<string | null> {
+    const r = await fetch('/api/accounts')
+    const d = await r.json()
+    const active = (d.accounts || []).find((a: { isActive: boolean }) => a.isActive)
+    return active?.email ?? d.accounts?.[0]?.email ?? null
+  }
+  async function fetchSignature(accId: number): Promise<string> {
+    const r = await fetch('/api/settings')
+    const d = await r.json()
+    return d.settings?.[`signature:${accId}`] || d.settings?.signature || ''
+  }
+
   const uploadFile = async (file: File, inline = false): Promise<PendingAttachment> => {
     const form = new FormData()
     form.append('file', file)
@@ -123,7 +214,6 @@ export function ComposeMail({
     }
   }
 
-  // 编辑器粘贴/拖入图片 → 上传拿 cid → 插入 <img src="cid:...">
   const handleInlineImage = async (file: File) => {
     setUploading(true)
     try {
@@ -138,17 +228,46 @@ export function ComposeMail({
     }
   }
 
-  const removeAttachment = (key: string) => {
-    setAttachments((prev) => prev.filter((a) => a.key !== key))
+  const removeAttachment = (key: string) => setAttachments((prev) => prev.filter((a) => a.key !== key))
+
+  // debounced 自动保存到草稿
+  const autosave = async (html: string) => {
+    const f = fieldsRef.current
+    const plain = htmlToText(html).trim()
+    try {
+      if (draftIdRef.current == null) {
+        const res = await fetch('/api/draft', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            accountId: activeAccountId ?? undefined,
+            to: f.to,
+            cc: f.cc,
+            bcc: f.bcc,
+            subject: f.subject,
+            body: plain,
+            bodyHtml: html,
+          }),
+        })
+        const data = await res.json()
+        if (res.ok) draftIdRef.current = data.id
+      } else {
+        await fetch(`/api/draft/${draftIdRef.current}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ to: f.to, cc: f.cc, bcc: f.bcc, subject: f.subject, body: plain, bodyHtml: html }),
+        })
+      }
+    } catch {
+      /* 自动保存失败静默 */
+    }
   }
 
   const handleSend = async () => {
     if (!to || !subject || !plainBody) return
     setSending(true)
     setMessage(null)
-
     try {
-      // 外联附件给 storagePath(服务端解析绝对路径);内联给 cid
       const payload = attachments.map((a) => ({
         filename: a.filename,
         storagePath: a.isInline ? undefined : a.storagePath,
@@ -157,10 +276,25 @@ export function ComposeMail({
       const res = await fetch('/api/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to, subject, body: plainBody, bodyHtml: body, replyToMessageId, attachments: payload }),
+        body: JSON.stringify({
+          to,
+          cc,
+          bcc,
+          subject,
+          body: plainBody,
+          bodyHtml: body,
+          replyToMessageId,
+          forwardOfMessageId,
+          accountId: activeAccountId ?? undefined,
+          attachments: payload,
+        }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
+      // 发送成功删除草稿(若有)
+      if (draftIdRef.current != null) {
+        await fetch(`/api/draft/${draftIdRef.current}`, { method: 'DELETE' }).catch(() => {})
+      }
       setMessage('✅ 邮件已发送')
       onDone?.()
     } catch (err) {
@@ -173,15 +307,15 @@ export function ComposeMail({
   const handleDraft = async () => {
     setDrafting(true)
     setMessage(null)
-
     try {
       const res = await fetch('/api/draft', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to, subject, body: plainBody, bodyHtml: body }),
+        body: JSON.stringify({ accountId: activeAccountId ?? undefined, to, cc, bcc, subject, body: plainBody, bodyHtml: body }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
+      draftIdRef.current = data.id
       setMessage('💾 草稿已保存')
     } catch (err) {
       setMessage(`❌ ${err instanceof Error ? err.message : '保存失败'}`)
@@ -194,21 +328,16 @@ export function ComposeMail({
     if (!originalBody) return
     setDrafting(true)
     setMessage(null)
-
     try {
       const res = await fetch('/api/reply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          originalBody,
-          originalSubject: subject,
-          todoContext,
-        }),
+        body: JSON.stringify({ originalBody, originalSubject: subject, todoContext }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       setBody(plainTextToHtml(data.draft))
-      setMessage('🤖 AI 草稿已生成，请审阅后发送')
+      setMessage('🤖 AI 草稿已生成,请审阅后发送')
     } catch (err) {
       setMessage(`❌ ${err instanceof Error ? err.message : 'AI 起草失败'}`)
     } finally {
@@ -216,25 +345,24 @@ export function ComposeMail({
     }
   }
 
-  // 外联附件(内联的在正文 cid 位置)
   const externalAttachments = attachments.filter((a) => !a.isInline)
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">✉️ 写邮件</CardTitle>
+        <CardTitle className="text-base">{forwardOfMessageId ? '↪️ 转发邮件' : '✉️ 写邮件'}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div>
-          <label className="mb-1 block text-xs text-muted-foreground">收件人</label>
-          <input
-            type="email"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-            placeholder="recipient@example.com"
-            className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-primary"
-          />
-        </div>
+        <RecipientFields
+          to={to}
+          cc={cc}
+          bcc={bcc}
+          onTo={setTo}
+          onCc={setCc}
+          onBcc={setBcc}
+          ownDomains={ownDomains}
+        />
+
         <div>
           <label className="mb-1 block text-xs text-muted-foreground">主题</label>
           <input
@@ -245,31 +373,34 @@ export function ComposeMail({
             className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-primary"
           />
         </div>
+
+        {mentionMissingAttachment && (
+          <div className="rounded-md border border-orange-400/50 bg-orange-400/10 px-3 py-1.5 text-xs text-orange-300">
+            ⚠️ 正文提到了附件,但尚未添加附件,确认要发送吗?
+          </div>
+        )}
+
         <div>
           <label className="mb-1 block text-xs text-muted-foreground">正文</label>
           <div
-            onDragOver={(e) => {
-              e.preventDefault()
-            }}
+            onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
               e.preventDefault()
               if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files)
             }}
           >
-            <RichTextEditor value={body} onChange={setBody} onInlineImage={handleInlineImage} />
+            <RichTextEditor
+              value={body}
+              onChange={setBody}
+              onInlineImage={handleInlineImage}
+              onChangeDebounced={autosave}
+            />
           </div>
         </div>
 
-        {/* 附件区 */}
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={uploading}
-              onClick={() => fileInputRef.current?.click()}
-            >
+            <Button type="button" variant="outline" size="sm" disabled={uploading} onClick={() => fileInputRef.current?.click()}>
               {uploading ? '⏳ 上传中...' : '📎 添加附件'}
             </Button>
             <span className="text-xs text-muted-foreground">或将文件拖入正文区域</span>
@@ -287,19 +418,11 @@ export function ComposeMail({
           {externalAttachments.length > 0 && (
             <ul className="space-y-1">
               {externalAttachments.map((a) => (
-                <li
-                  key={a.key}
-                  className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-2 py-1 text-xs"
-                >
+                <li key={a.key} className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-2 py-1 text-xs">
                   <span>{iconFor(a.mimeType)}</span>
                   <span className="flex-1 truncate text-foreground">{a.filename}</span>
                   <span className="text-muted-foreground">{fmtSize(a.size)}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeAttachment(a.key)}
-                    className="text-muted-foreground hover:text-red-500"
-                    title="移除"
-                  >
+                  <button type="button" onClick={() => removeAttachment(a.key)} className="text-muted-foreground hover:text-red-500" title="移除">
                     ✕
                   </button>
                 </li>
@@ -311,11 +434,7 @@ export function ComposeMail({
         {message && <p className="text-sm">{message}</p>}
 
         <div className="flex gap-2">
-          <Button
-            onClick={handleSend}
-            disabled={sending || !to || !subject || !plainBody}
-            className="flex-1"
-          >
+          <Button onClick={handleSend} disabled={sending || !to || !subject || !plainBody} className="flex-1">
             {sending ? '⏳ 发送中...' : '📤 发送'}
           </Button>
           {originalBody && (
@@ -333,9 +452,7 @@ export function ComposeMail({
           )}
         </div>
 
-        <p className="text-xs text-muted-foreground">
-          🔒 安全提示：邮件不会自动发送，点击「发送」前请确认内容
-        </p>
+        <p className="text-xs text-muted-foreground">🔒 安全提示:邮件不会自动发送,点击「发送」前请确认内容</p>
       </CardContent>
     </Card>
   )

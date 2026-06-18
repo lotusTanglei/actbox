@@ -155,6 +155,12 @@ export default function MailDetailPage() {
           >
             ↩ 回复
           </Link>
+          <Link
+            href={`/compose?forwardMessageId=${encodeURIComponent(message.messageId)}&subject=${encodeURIComponent(message.subject || '')}&originalBody=${encodeURIComponent(message.body || '')}&from=${encodeURIComponent(message.from || '')}&origTo=${encodeURIComponent(message.to || '')}&date=${encodeURIComponent(message.receivedAt || '')}`}
+            className="rounded border px-3 py-1 text-xs transition-colors hover:bg-accent"
+          >
+            ↪ 转发
+          </Link>
           <button onClick={handleToggleStar} className="text-lg" title="星标">
             {message.isStarred ? '⭐' : '☆'}
           </button>

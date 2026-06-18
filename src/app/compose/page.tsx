@@ -16,21 +16,36 @@ function ComposeContent() {
   const originalBody = searchParams.get('originalBody') || undefined
   const todoContext = searchParams.get('todoContext') || undefined
 
+  const forwardMessageId = searchParams.get('forwardMessageId') || undefined
+
   return (
     <div className="flex h-full flex-col overflow-y-auto">
       <header className="border-b border-border px-6 py-3">
-        <h1 className="text-lg font-bold text-foreground">✏️ 写邮件</h1>
+        <h1 className="text-lg font-bold text-foreground">{forwardMessageId ? '↪️ 转发' : '✏️ 写邮件'}</h1>
       </header>
       <div className="max-w-3xl px-6 py-6">
-        <ComposeMail
-          to={replyTo}
-          subject={replySubject.startsWith('Re:') ? replySubject : (replySubject ? `Re: ${replySubject}` : '')}
-          replyToMessageId={replyMessageId}
-          originalBody={originalBody}
-          todoContext={todoContext}
-          onDone={() => router.push('/mails')}
-          onCancel={() => router.back()}
-        />
+        {forwardMessageId ? (
+          <ComposeMail
+            forwardOfMessageId={forwardMessageId}
+            originalBody={originalBody}
+            originalSubject={replySubject}
+            originalFrom={searchParams.get('from') || undefined}
+            originalTo={searchParams.get('origTo') || undefined}
+            originalDate={searchParams.get('date') || undefined}
+            onDone={() => router.push('/mails')}
+            onCancel={() => router.back()}
+          />
+        ) : (
+          <ComposeMail
+            to={replyTo}
+            subject={replySubject.startsWith('Re:') ? replySubject : (replySubject ? `Re: ${replySubject}` : '')}
+            replyToMessageId={replyMessageId}
+            originalBody={originalBody}
+            todoContext={todoContext}
+            onDone={() => router.push('/mails')}
+            onCancel={() => router.back()}
+          />
+        )}
       </div>
     </div>
   )

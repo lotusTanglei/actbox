@@ -58,7 +58,7 @@ export interface RawMessage {
 export interface MailAdapter {
   testConnection(): Promise<{ ok: boolean; detail: string }>
   listFolders(): Promise<FolderInfo[]>
-  fetch(opts: { folder: string; since?: Date; uidRange?: [number, number] }): Promise<RawMessage[]>
+  fetch(opts: { folder: string; since?: Date; uidRange?: [number, number]; highestModSeq?: bigint }): Promise<RawMessage[]>
   send(params: SendParams): Promise<{ messageId: string; imapUid?: number }>
   move(uid: number, fromFolder: string, toFolder: string): Promise<void>
   markRead(uid: number, folder: string, isRead: boolean): Promise<void>

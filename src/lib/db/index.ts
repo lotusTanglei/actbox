@@ -8,6 +8,7 @@ import fs from 'fs'
 import { alignBaseline, migrate } from './migrate-runner'
 
 let _db: ReturnType<typeof drizzle> | null = null
+let _raw: Database.Database | null = null
 
 /**
  * 获取 Drizzle 实例（单例）。
@@ -28,6 +29,7 @@ export function getDb() {
   const sqlite = new Database(dbPath)
   sqlite.pragma('journal_mode = WAL')
 
+  _raw = sqlite
   _db = drizzle(sqlite, { schema })
 
   const migrationsFolder = path.join(process.cwd(), 'drizzle')
@@ -37,6 +39,12 @@ export function getDb() {
   }
 
   return _db
+}
+
+/** 原生 better-sqlite3 实例(供 raw SQL 模块:folders/sync/writeback 用)。 */
+export function getRawDb(): Database.Database {
+  getDb()
+  return _raw!
 }
 
 /** 重置 DB 实例（测试用） */

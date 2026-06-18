@@ -16,6 +16,11 @@ export function startScheduler(
   // 如果已有任务，先停止
   stopScheduler()
 
+  // 启动实时:IDLE supervisor(每活跃 idle 账号)+ 降级轮询。plan-06 Task 8
+  import('@/lib/realtime/startSupervisors')
+    .then(({ startSupervisors }) => startSupervisors())
+    .catch((e) => console.error('[Scheduler] supervisors start failed', e))
+
   scheduledTask = cron.schedule(cronExpression, async () => {
     try {
       console.log('[Scheduler] 开始定时拉取...')

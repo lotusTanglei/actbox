@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Sidebar } from './Sidebar'
 import { onRefresh } from '@/lib/refresh-bus'
+import { useMailEvents } from '@/components/realtime/useMailEvents'
 
 interface AppShellProps {
   children: React.ReactNode
@@ -38,15 +39,25 @@ export function AppShell({ children }: AppShellProps) {
 
   useEffect(() => {
     loadCounts()
-    // 定期刷新计数（每 60 秒）
-    const interval = setInterval(loadCounts, 60000)
     // 订阅子页面触发的刷新（如勾选待办、标记已读后）
     const unsub = onRefresh(loadCounts)
     return () => {
-      clearInterval(interval)
       unsub()
     }
   }, [loadCounts, refreshKey])
+
+  // 实时:SSE 推送替代 60s 轮询(new-mail → 刷新列表/计数;unread-count → 角标)。plan-06 Task 8
+  useMailEvents({
+    onNewMail: () => {
+      loadCounts()
+      router.refresh()
+    },
+    onUnreadCount: (p) => {
+      if (p.folder === 'INBOX') setUnreadCount(p.unread)
+    },
+    onMessageUpdated: () => loadCounts(),
+    onStatus: () => loadCounts(),
+  })
 
   const handleRefresh = async () => {
     try {

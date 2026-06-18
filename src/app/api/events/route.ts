@@ -12,7 +12,17 @@ function formatSSE(e: EventEnvelope): string {
   return `id: ${e.seq}\nevent: ${e.type}\ndata: ${JSON.stringify(e.payload)}\n\n`
 }
 
+let realtimeEnsured = false
+
 export async function GET(req: Request): Promise<Response> {
+  // 首次连接惰性启动实时(IDLE supervisor + 降级轮询)。plan-06 Task 8
+  if (!realtimeEnsured) {
+    realtimeEnsured = true
+    import('@/lib/realtime/startSupervisors')
+      .then((m) => m.startSupervisors())
+      .catch(() => {})
+  }
+
   const encoder = new TextEncoder()
   const lastEventId = Number(req.headers.get('last-event-id') ?? 0)
 

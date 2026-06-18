@@ -2,10 +2,166 @@
 
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 
 type Section = 'email' | 'llm' | 'scheduler' | 'signature'
+
+// ── LLM 配置表单组件 ──
+const CAPABILITIES = ['summarize', 'polish', 'classify', 'extract', 'reply'] as const
+const CAP_LABELS: Record<string, string> = { summarize: '摘要', polish: '润色', classify: '打标', extract: '抽取', reply: '回复' }
+
+function LlmConfigForm() {
+  const [providers, setProviders] = useState<Array<{ name: string; label: string; defaultBaseUrl: string; defaultModel: string }>>([])
+  const [provider, setProvider] = useState('deepseek')
+  const [apiKey, setApiKey] = useState('')
+  const [apiKeySet, setApiKeySet] = useState(false)
+  const [apiKeyMasked, setApiKeyMasked] = useState('')
+  const [baseUrl, setBaseUrl] = useState('')
+  const [model, setModel] = useState('')
+  const [temperature, setTemperature] = useState(0.3)
+  const [capModels, setCapModels] = useState<Record<string, string>>({})
+  const [showKey, setShowKey] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null)
+  const [saveMsg, setSaveMsg] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    try {
+      const r = await fetch('/api/llm/config')
+      const d = await r.json()
+      setProviders(d.providers || [])
+      setProvider(d.config.provider)
+      setBaseUrl(d.config.baseUrl)
+      setModel(d.config.model)
+      setTemperature(d.config.temperature ?? 0.3)
+      setApiKeyMasked(d.config.apiKeyMasked || '')
+      setApiKeySet(d.config.apiKeySet)
+      setApiKey('')
+      const cm: Record<string, string> = {}
+      for (const cap of CAPABILITIES) {
+        cm[cap] = d.config.capabilities?.[cap]?.model || ''
+      }
+      setCapModels(cm)
+    } catch { /* ignore */ }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const handleProviderChange = (p: string) => {
+    setProvider(p)
+    const def = providers.find((x) => x.name === p)
+    if (def) { setBaseUrl(def.defaultBaseUrl); setModel(def.defaultModel) }
+  }
+
+  const handleTest = async () => {
+    setTesting(true); setTestResult(null)
+    try {
+      const body: any = { provider, baseUrl, model }
+      if (apiKey) body.apiKey = apiKey
+      const r = await fetch('/api/llm/test', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+      const j = await r.json()
+      if (j.ok) { setTestResult({ ok: true, msg: `✅ 连通成功 · ${j.latencyMs}ms · ${j.model}` }) }
+      else { setTestResult({ ok: false, msg: `❌ ${j.error}` }) }
+    } catch (e: any) { setTestResult({ ok: false, msg: `❌ ${e.message}` }) }
+    finally { setTesting(false) }
+  }
+
+  const handleSave = async () => {
+    setSaving(true); setSaveMsg(null)
+    try {
+      const body: any = { provider, baseUrl, model, temperature }
+      if (apiKey) body.apiKey = apiKey
+      const caps: Record<string, { model: string }> = {}
+      for (const cap of CAPABILITIES) { if (capModels[cap]) caps[cap] = { model: capModels[cap] } }
+      if (Object.keys(caps).length) body.capabilities = caps
+      await fetch('/api/llm/config', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+      setSaveMsg('✅ 已保存')
+      setApiKey(''); load()
+    } catch { setSaveMsg('❌ 保存失败') }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div className="space-y-4 rounded-lg border p-4">
+      <h3 className="font-medium">LLM 配置中心</h3>
+
+      {/* Provider */}
+      <div>
+        <label className="mb-1 block text-xs text-muted-foreground">Provider</label>
+        <select value={provider} onChange={(e) => handleProviderChange(e.target.value)} className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-primary bg-background">
+          {providers.map((p) => <option key={p.name} value={p.name}>{p.label}</option>)}
+        </select>
+      </div>
+
+      {/* API Key */}
+      <div>
+        <label className="mb-1 block text-xs text-muted-foreground">API Key {apiKeySet && <span className="text-green-600">(已配置)</span>}</label>
+        <div className="flex gap-1">
+          <input type={showKey ? 'text' : 'password'} value={apiKey} onChange={(e) => setApiKey(e.target.value)}
+            placeholder={apiKeyMasked || 'sk-...'}
+            className="flex-1 rounded-md border px-3 py-2 text-sm outline-none focus:border-primary" />
+          <button onClick={() => setShowKey((v) => !v)} className="rounded-md border px-2 text-xs hover:bg-accent">{showKey ? '隐藏' : '显示'}</button>
+        </div>
+      </div>
+
+      {/* baseUrl */}
+      <div>
+        <label className="mb-1 block text-xs text-muted-foreground">Base URL</label>
+        <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-primary" />
+      </div>
+
+      {/* Model + Temperature */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="mb-1 block text-xs text-muted-foreground">默认模型</label>
+          <input value={model} onChange={(e) => setModel(e.target.value)} className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-primary" />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-muted-foreground">温度 ({temperature})</label>
+          <input type="range" min="0" max="1" step="0.1" value={temperature} onChange={(e) => setTemperature(Number(e.target.value))} className="w-full" />
+        </div>
+      </div>
+
+      {/* Per-capability model */}
+      <details className="rounded-md border p-3">
+        <summary className="cursor-pointer text-xs font-medium text-muted-foreground">各能力模型覆盖（可选）</summary>
+        <div className="mt-2 space-y-2">
+          {CAPABILITIES.map((cap) => (
+            <div key={cap} className="flex items-center gap-2">
+              <span className="w-14 text-xs text-muted-foreground">{CAP_LABELS[cap]}</span>
+              <input value={capModels[cap] || ''} onChange={(e) => setCapModels((prev) => ({ ...prev, [cap]: e.target.value }))}
+                placeholder={model || '同默认'}
+                className="flex-1 rounded-md border px-2 py-1 text-xs outline-none focus:border-primary" />
+            </div>
+          ))}
+        </div>
+      </details>
+
+      {/* Buttons */}
+      <div className="flex gap-2">
+        <button onClick={handleTest} disabled={testing} className="flex-1 rounded-lg border px-4 py-2 text-sm hover:bg-accent disabled:opacity-50">
+          {testing ? '测试中...' : '🔌 测试连通'}
+        </button>
+        <button onClick={handleSave} disabled={saving} className="flex-1 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+          {saving ? '保存中...' : '💾 保存'}
+        </button>
+      </div>
+
+      {testResult && (
+        <div className={`rounded-md border p-2 text-xs ${testResult.ok ? 'border-green-200 bg-green-50 text-green-700' : 'border-red-200 bg-red-50 text-red-700'}`}>
+          {testResult.msg}
+        </div>
+      )}
+      {saveMsg && (
+        <div className={`rounded-md border p-2 text-xs ${saveMsg.startsWith('✅') ? 'border-green-200 bg-green-50 text-green-700' : 'border-red-200 bg-red-50 text-red-700'}`}>
+          {saveMsg}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function SettingsPage() {
   const [section, setSection] = useState<Section>('email')
@@ -224,21 +380,7 @@ export default function SettingsPage() {
 
       {/* LLM Settings */}
       {section === 'llm' && (
-        <div className="space-y-3 rounded-lg border p-4">
-          <h3 className="font-medium">LLM Provider</h3>
-          <p className="text-xs text-muted-foreground">
-            Provider 切换和 API Key 在 .env.local 中配置。当前: <strong>{llmProvider}</strong>
-          </p>
-          <div className="rounded-lg bg-muted p-3 text-xs font-mono">
-            <p>LLM_PROVIDER={llmProvider}</p>
-            <p>DEEPSEEK_API_KEY=sk-***</p>
-            <p>DEEPSEEK_BASE_URL=https://api.deepseek.com</p>
-            <p>DEEPSEEK_MODEL=deepseek-v4-flash</p>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            修改后重启 dev server 生效
-          </p>
-        </div>
+        <LlmConfigForm />
       )}
 
       {/* Scheduler Settings */}

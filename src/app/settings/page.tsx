@@ -3,6 +3,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 
 type Section = 'email' | 'llm' | 'scheduler' | 'signature'
 
@@ -215,6 +216,9 @@ export default function SettingsPage() {
           <p className="text-xs text-muted-foreground">
             💡 授权码和 API Key 保存在 .env.local，不在数据库中
           </p>
+          <Link href="/settings/accounts" className="mt-2 block rounded-lg border border-primary/40 bg-primary/5 px-4 py-2 text-center text-sm font-medium text-primary hover:bg-primary/10">
+            🧾 管理多个邮箱账号 →
+          </Link>
         </div>
       )}
 

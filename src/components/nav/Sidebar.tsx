@@ -23,6 +23,24 @@ interface AccountLite {
   unreadCount: number
 }
 
+interface FolderLite {
+  accountId: number
+  path: string
+  displayName: string
+  type: 'inbox' | 'sent' | 'drafts' | 'trash' | 'spam' | 'archive' | 'custom'
+  unreadCount: number
+  totalCount: number
+}
+
+const SYSTEM_FOLDERS: { type: FolderLite['type']; label: string; icon: string; param: string }[] = [
+  { type: 'inbox', label: '收件箱', icon: '📥', param: 'inbox' },
+  { type: 'sent', label: '已发送', icon: '📤', param: 'sent' },
+  { type: 'drafts', label: '草稿箱', icon: '📝', param: 'drafts' },
+  { type: 'archive', label: '归档', icon: '🗄️', param: 'archive' },
+  { type: 'trash', label: '已删除', icon: '🗑️', param: 'trash' },
+  { type: 'spam', label: '垃圾邮件', icon: '⚠️', param: 'spam' },
+]
+
 // provider 徽标颜色(与账号管理 UI 对齐)
 const PROVIDER_BADGE: Record<string, { badge: string; color: string }> = {
   '163': { badge: '163', color: 'bg-orange-500' },
@@ -38,12 +56,23 @@ export function Sidebar({ unreadCount = 0, todoPendingCount = 0, onSearch, onRef
   const [search, setSearch] = useState('')
   const [collapsedFolders, setCollapsedFolders] = useState(false)
   const [accounts, setAccounts] = useState<AccountLite[]>([])
+  const [folders, setFolders] = useState<FolderLite[]>([])
+
+  // 按 type 聚合未读(多账号合并)
+  const unreadByType = folders.reduce<Record<string, number>>((acc, f) => {
+    acc[f.type] = (acc[f.type] || 0) + (f.unreadCount || 0)
+    return acc
+  }, {})
 
   const loadAccounts = async () => {
     try {
-      const res = await fetch('/api/accounts')
-      const data = await res.json()
-      setAccounts((data.accounts || []).filter((a: AccountLite) => a.isActive))
+      const [accRes, folderRes] = await Promise.all([fetch('/api/accounts'), fetch('/api/folders')])
+      const accData = await accRes.json()
+      setAccounts((accData.accounts || []).filter((a: AccountLite) => a.isActive))
+      if (folderRes.ok) {
+        const folderData = await folderRes.json()
+        setFolders(folderData.folders || [])
+      }
     } catch {
       // 静默
     }
@@ -150,6 +179,19 @@ export function Sidebar({ unreadCount = 0, todoPendingCount = 0, onSearch, onRef
             <Link href="/mails?folder=sent" className="flex items-center rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground">
               <span className="ml-4">📤 已发送</span>
             </Link>
+
+            {SYSTEM_FOLDERS.filter((f) => ['archive', 'trash', 'spam'].includes(f.type)).map((f) => (
+              <Link
+                key={f.type}
+                href={`/mails?folder=${f.param}`}
+                className="flex items-center justify-between rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+              >
+                <span className="ml-4">{f.icon} {f.label}</span>
+                {(unreadByType[f.type] || 0) > 0 && (
+                  <span className="text-[10px] text-muted-foreground">{unreadByType[f.type]}</span>
+                )}
+              </Link>
+            ))}
           </nav>
         )}
 

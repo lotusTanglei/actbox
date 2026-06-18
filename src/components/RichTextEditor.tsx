@@ -17,6 +17,8 @@ import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table
 interface RichTextEditorProps {
   value: string
   onChange: (html: string) => void
+  /** 粘贴/拖入图片时回调:上传后返回 cid(插入 <img src="cid:...">);失败返回 undefined。plan-04 Task 9 */
+  onInlineImage?: (file: File) => Promise<string | undefined>
 }
 
 const FONT_SIZES = ['12px', '14px', '16px', '18px', '24px', '32px']
@@ -65,12 +67,27 @@ function Tool({
   )
 }
 
-export function RichTextEditor({ value, onChange }: RichTextEditorProps) {
+export function RichTextEditor({ value, onChange, onInlineImage }: RichTextEditorProps) {
   const onChangeRef = useRef(onChange)
   useEffect(() => {
     onChangeRef.current = onChange
   }, [onChange])
   const lastEmitted = useRef(value)
+  const editorRef = useRef<ReturnType<typeof useEditor> | null>(null)
+  const inlineCbRef = useRef(onInlineImage)
+  useEffect(() => {
+    inlineCbRef.current = onInlineImage
+  }, [onInlineImage])
+
+  // 粘贴/拖入图片 → 上传拿 cid → 插入 <img src="cid:...">;调用方(ComposeMail)登记为内联附件
+  const ingestImage = async (file: File) => {
+    const cb = inlineCbRef.current
+    if (!cb) return
+    const cid = await cb(file)
+    if (cid) {
+      editorRef.current?.chain().focus().setImage({ src: `cid:${cid}` }).run()
+    }
+  }
 
   const editor = useEditor({
     extensions: [
@@ -97,8 +114,34 @@ export function RichTextEditor({ value, onChange }: RichTextEditorProps) {
         class:
           'min-h-[260px] w-full rounded-md border border-input bg-input px-3 py-2 text-sm leading-relaxed text-foreground outline-none focus:border-primary',
       },
+      handlePaste: (_view, event) => {
+        const items = event.clipboardData?.items
+        if (!items) return false
+        for (const item of Array.from(items)) {
+          if (item.type.startsWith('image/')) {
+            const file = item.getAsFile()
+            if (file) {
+              void ingestImage(file)
+              return true // 阻止默认粘贴,改插 cid 图片
+            }
+          }
+        }
+        return false
+      },
+      handleDrop: (_view, event) => {
+        const files = event.dataTransfer?.files
+        if (!files) return false
+        const imgs = Array.from(files).filter((f) => f.type.startsWith('image/'))
+        if (!imgs.length) return false
+        for (const f of imgs) void ingestImage(f)
+        return true
+      },
     },
   })
+
+  useEffect(() => {
+    editorRef.current = editor
+  }, [editor])
 
   // 外部 value 变化（如 AI 起草整体替换）时同步进编辑器
   useEffect(() => {

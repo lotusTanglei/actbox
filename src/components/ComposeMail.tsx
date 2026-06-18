@@ -2,11 +2,22 @@
 
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { htmlToText } from 'html-to-text'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { RichTextEditor } from '@/components/RichTextEditor'
+
+/** 上传端点返回的待发附件元数据 */
+export interface PendingAttachment {
+  key: string
+  filename: string
+  size: number
+  mimeType: string
+  storagePath: string // 相对根(attachments/tmp/{sha}.bin)
+  cid?: string // 内联图片才有
+  isInline: boolean
+}
 
 interface ComposeMailProps {
   /** 预填收件人 */
@@ -40,6 +51,20 @@ function plainTextToHtml(text: string): string {
     .join('')
 }
 
+function fmtSize(n: number): string {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / 1024 / 1024).toFixed(1)} MB`
+}
+
+function iconFor(mime: string): string {
+  if (mime.startsWith('image/')) return '🖼'
+  if (mime === 'application/pdf') return '📄'
+  if (mime.includes('zip') || mime.includes('compressed')) return '🗜'
+  if (mime.startsWith('text/')) return '📝'
+  return '📎'
+}
+
 export function ComposeMail({
   to: initialTo = '',
   subject: initialSubject = '',
@@ -53,12 +78,69 @@ export function ComposeMail({
   const [to, setTo] = useState(initialTo)
   const [subject, setSubject] = useState(initialSubject)
   const [body, setBody] = useState(initialBody)
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([])
   const [sending, setSending] = useState(false)
   const [drafting, setDrafting] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const keySeq = useRef(0)
 
   // 正文纯文本（用于校验/摘要/不支持 HTML 的客户端）；body 本身是 HTML
   const plainBody = htmlToText(body).trim()
+
+  /** 上传单个文件到 /api/upload,返回待发元数据 */
+  const uploadFile = async (file: File, inline = false): Promise<PendingAttachment> => {
+    const form = new FormData()
+    form.append('file', file)
+    if (inline) form.append('inline', '1')
+    const res = await fetch('/api/upload', { method: 'POST', body: form })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || '上传失败')
+    return {
+      key: `att-${keySeq.current++}`,
+      filename: data.filename,
+      size: data.size,
+      mimeType: data.mimeType,
+      storagePath: data.storagePath,
+      cid: data.cid,
+      isInline: inline,
+    }
+  }
+
+  const addFiles = async (files: FileList | File[], inline = false) => {
+    const arr = Array.from(files)
+    if (!arr.length) return
+    setUploading(true)
+    setMessage(null)
+    try {
+      const uploaded = await Promise.all(arr.map((f) => uploadFile(f, inline)))
+      setAttachments((prev) => [...prev, ...uploaded])
+    } catch (err) {
+      setMessage(`❌ ${err instanceof Error ? err.message : '上传失败'}`)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  // 编辑器粘贴/拖入图片 → 上传拿 cid → 插入 <img src="cid:...">
+  const handleInlineImage = async (file: File) => {
+    setUploading(true)
+    try {
+      const att = await uploadFile(file, true)
+      setAttachments((prev) => [...prev, att])
+      return att.cid
+    } catch (err) {
+      setMessage(`❌ ${err instanceof Error ? err.message : '图片上传失败'}`)
+      return undefined
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const removeAttachment = (key: string) => {
+    setAttachments((prev) => prev.filter((a) => a.key !== key))
+  }
 
   const handleSend = async () => {
     if (!to || !subject || !plainBody) return
@@ -66,10 +148,16 @@ export function ComposeMail({
     setMessage(null)
 
     try {
+      // 外联附件给 storagePath(服务端解析绝对路径);内联给 cid
+      const payload = attachments.map((a) => ({
+        filename: a.filename,
+        storagePath: a.isInline ? undefined : a.storagePath,
+        cid: a.cid,
+      }))
       const res = await fetch('/api/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to, subject, body: plainBody, bodyHtml: body, replyToMessageId }),
+        body: JSON.stringify({ to, subject, body: plainBody, bodyHtml: body, replyToMessageId, attachments: payload }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
@@ -128,6 +216,9 @@ export function ComposeMail({
     }
   }
 
+  // 外联附件(内联的在正文 cid 位置)
+  const externalAttachments = attachments.filter((a) => !a.isInline)
+
   return (
     <Card>
       <CardHeader>
@@ -156,12 +247,68 @@ export function ComposeMail({
         </div>
         <div>
           <label className="mb-1 block text-xs text-muted-foreground">正文</label>
-          <RichTextEditor value={body} onChange={setBody} />
+          <div
+            onDragOver={(e) => {
+              e.preventDefault()
+            }}
+            onDrop={(e) => {
+              e.preventDefault()
+              if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files)
+            }}
+          >
+            <RichTextEditor value={body} onChange={setBody} onInlineImage={handleInlineImage} />
+          </div>
         </div>
 
-        {message && (
-          <p className="text-sm">{message}</p>
-        )}
+        {/* 附件区 */}
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={uploading}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {uploading ? '⏳ 上传中...' : '📎 添加附件'}
+            </Button>
+            <span className="text-xs text-muted-foreground">或将文件拖入正文区域</span>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files) addFiles(e.target.files)
+                e.target.value = ''
+              }}
+            />
+          </div>
+          {externalAttachments.length > 0 && (
+            <ul className="space-y-1">
+              {externalAttachments.map((a) => (
+                <li
+                  key={a.key}
+                  className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-2 py-1 text-xs"
+                >
+                  <span>{iconFor(a.mimeType)}</span>
+                  <span className="flex-1 truncate text-foreground">{a.filename}</span>
+                  <span className="text-muted-foreground">{fmtSize(a.size)}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeAttachment(a.key)}
+                    className="text-muted-foreground hover:text-red-500"
+                    title="移除"
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {message && <p className="text-sm">{message}</p>}
 
         <div className="flex gap-2">
           <Button
@@ -172,11 +319,7 @@ export function ComposeMail({
             {sending ? '⏳ 发送中...' : '📤 发送'}
           </Button>
           {originalBody && (
-            <Button
-              onClick={handleAiDraft}
-              disabled={drafting}
-              variant="outline"
-            >
+            <Button onClick={handleAiDraft} disabled={drafting} variant="outline">
               {drafting ? '⏳ AI 起草中...' : '🤖 AI 起草'}
             </Button>
           )}

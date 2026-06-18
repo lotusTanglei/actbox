@@ -36,7 +36,7 @@ describe('schema 迁移 + 存量库基准对齐', () => {
 
     const tables = raw.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[]
     expect(tables.map((t) => t.name)).toEqual(
-      expect.arrayContaining(['messages', 'todos', 'settings', 'labels', 'message_labels', 'contacts', 'contacts_groups', '__drizzle_migrations']),
+      expect.arrayContaining(['messages', 'todos', 'settings', 'labels', 'message_labels', 'contacts', 'contacts_groups', 'rules', '__drizzle_migrations']),
     )
     const { c } = raw.prepare('SELECT COUNT(*) AS c FROM __drizzle_migrations').get() as { c: number }
     expect(c).toBeGreaterThanOrEqual(1)

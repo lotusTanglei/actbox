@@ -57,6 +57,13 @@
       "when": 1781776311712,
       "tag": "0007_stormy_onslaught",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1781778451198,
+      "tag": "0008_perfect_masque",
+      "breakpoints": true
     }
   ]
 }

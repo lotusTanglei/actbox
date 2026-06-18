@@ -167,3 +167,19 @@ export const contacts = sqliteTable('contacts', {
   accNameIdx: index('idx_contacts_account_name').on(t.accountId, t.name),
   accGroupIdx: index('idx_contacts_account_group').on(t.accountId, t.groupId),
 }))
+
+/** 邮件规则/过滤器（按账号隔离，order 决定匹配优先级，小在前） */
+export const rules = sqliteTable('rules', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  accountId: integer('account_id').notNull(),
+  name: text('name').notNull(),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  conditions: text('conditions').notNull(), // JSON string
+  actions: text('actions').notNull(),        // JSON string
+  order: integer('order').notNull().default(0),
+  kind: text('kind', { enum: ['normal', 'whitelist', 'blacklist'] }).notNull().default('normal'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+}, (t) => ({
+  accOrderIdx: index('idx_rules_account_order').on(t.accountId, t.order),
+  accKindIdx: index('idx_rules_account_kind').on(t.accountId, t.kind),
+}))

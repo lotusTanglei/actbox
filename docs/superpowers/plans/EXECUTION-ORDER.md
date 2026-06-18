@@ -89,7 +89,7 @@
 
 阶段 2 · 实时
 
-- [ ] plan-06 实时性与通知（IDLE + SSE + Notification）
+- [x] plan-06 实时性与通知（IDLE + SSE + Notification）✅
 
 阶段 3 · P0 收尾
 

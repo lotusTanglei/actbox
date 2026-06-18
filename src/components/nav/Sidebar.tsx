@@ -4,19 +4,54 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 interface SidebarProps {
   unreadCount?: number
   todoPendingCount?: number
   onSearch?: (query: string) => void
   onRefresh?: () => void
+  onAccountsChange?: () => void
+}
+
+interface AccountLite {
+  id: number
+  email: string
+  provider: string
+  displayName: string | null
+  isActive: boolean
+  unreadCount: number
+}
+
+// provider 徽标颜色(与账号管理 UI 对齐)
+const PROVIDER_BADGE: Record<string, { badge: string; color: string }> = {
+  '163': { badge: '163', color: 'bg-orange-500' },
+  '126': { badge: '126', color: 'bg-orange-500' },
+  qq: { badge: 'QQ', color: 'bg-blue-500' },
+  gmail: { badge: 'G', color: 'bg-red-500' },
+  outlook: { badge: 'OL', color: 'bg-sky-600' },
+  custom: { badge: '⚙', color: 'bg-gray-500' },
 }
 
 export function Sidebar({ unreadCount = 0, todoPendingCount = 0, onSearch, onRefresh }: SidebarProps) {
   const pathname = usePathname()
   const [search, setSearch] = useState('')
   const [collapsedFolders, setCollapsedFolders] = useState(false)
+  const [accounts, setAccounts] = useState<AccountLite[]>([])
+
+  const loadAccounts = async () => {
+    try {
+      const res = await fetch('/api/accounts')
+      const data = await res.json()
+      setAccounts((data.accounts || []).filter((a: AccountLite) => a.isActive))
+    } catch {
+      // 静默
+    }
+  }
+
+  useEffect(() => {
+    loadAccounts()
+  }, [unreadCount]) // 收件箱未读变化时刷新账号未读角标
 
   const isActive = (href: string) =>
     pathname === href || (href !== '/' && pathname.startsWith(href))
@@ -118,14 +153,38 @@ export function Sidebar({ unreadCount = 0, todoPendingCount = 0, onSearch, onRef
           </nav>
         )}
 
-        {/* 邮箱账号 */}
-        <div className="mb-1 mt-4 px-2 py-1 text-xs font-medium text-muted-foreground">邮箱</div>
+        {/* 邮箱账号(动态) */}
+        <div className="mb-1 mt-4 flex items-center justify-between px-2 py-1">
+          <span className="text-xs font-medium text-muted-foreground">邮箱</span>
+          <Link href="/settings/accounts" className="text-[10px] text-muted-foreground hover:text-foreground" title="管理账号">
+            管理
+          </Link>
+        </div>
         <div className="space-y-0.5">
-          <div className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-foreground transition-colors hover:bg-accent/50">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-orange-500 text-[10px] font-bold text-white">163</span>
-            <span className="flex-1 truncate">tanglei_12301</span>
-            {unreadCount > 0 && <span className="h-1.5 w-1.5 rounded-full bg-green-500" />}
-          </div>
+          {accounts.length === 0 && (
+            <Link href="/settings/accounts" className="block rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground">
+              + 添加邮箱账号
+            </Link>
+          )}
+          {accounts.map((a) => {
+            const m = PROVIDER_BADGE[a.provider] || PROVIDER_BADGE.custom
+            return (
+              <Link
+                key={a.id}
+                href={`/mails?account=${a.id}`}
+                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-foreground transition-colors hover:bg-accent/50"
+                title={a.email}
+              >
+                <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${m.color} text-[10px] font-bold text-white`}>
+                  {m.badge}
+                </span>
+                <span className="flex-1 truncate">{a.displayName || a.email}</span>
+                {a.unreadCount > 0 && (
+                  <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] text-primary-foreground">{a.unreadCount}</span>
+                )}
+              </Link>
+            )
+          })}
         </div>
       </div>
 

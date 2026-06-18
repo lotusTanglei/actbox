@@ -2,8 +2,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
-import { accounts } from '@/lib/db/schema'
+import { accounts, messages } from '@/lib/db/schema'
 import { getPreset } from '@/lib/adapter/mail/presets'
+import { and, count, eq } from 'drizzle-orm'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function sanitize(row: any) {
@@ -11,11 +12,23 @@ function sanitize(row: any) {
   return safe
 }
 
-/** GET /api/accounts — 列出所有账号（不含凭据） */
+/** GET /api/accounts — 列出所有账号(不含凭据)+ 每账号未读数 */
 export async function GET() {
   const db = getDb()
   const rows = db.select().from(accounts).all() as any[]
-  return NextResponse.json({ accounts: rows.map(sanitize) })
+
+  // 按账号聚合未读(收件 + 未删)
+  const unreadRows = db
+    .select({ accountId: messages.accountId, n: count() })
+    .from(messages)
+    .where(and(eq(messages.isRead, false), eq(messages.direction, 'in'), eq(messages.isDeleted, false)))
+    .groupBy(messages.accountId)
+    .all() as { accountId: number; n: number }[]
+  const unreadMap: Record<number, number> = {}
+  for (const r of unreadRows) unreadMap[r.accountId] = r.n
+
+  const out = rows.map((r) => ({ ...sanitize(r), unreadCount: unreadMap[r.id] || 0 }))
+  return NextResponse.json({ accounts: out })
 }
 
 /** POST /api/accounts — 新增账号（provider 有 preset 时自动填 host/port） */

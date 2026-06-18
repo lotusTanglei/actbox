@@ -45,3 +45,48 @@ export function listActiveAccountIds(db?: Db): number[] {
     .all() as { id: number }[]
   return rows.map((r) => r.id)
 }
+
+/**
+ * env 引导迁移:库中无任何账号、但 env 有 IMAP_USER/IMAP_AUTH_CODE 时,
+ * 自动建一个默认账号(从旧的单账号 .env.local 平滑迁移到多账号模型)。
+ * 幂等:已有账号或 env 无凭据 → 返回 null。
+ */
+export function ensureBootstrapAccount(db?: Db): number | null {
+  const _db = db ?? getDb()
+  const existing = _db.select({ id: accounts.id }).from(accounts).all()
+  if (existing.length > 0) return null
+
+  const user = process.env.IMAP_USER
+  const authCode = process.env.IMAP_AUTH_CODE
+  if (!user || !authCode) return null
+
+  const imapHost = process.env.IMAP_HOST || ''
+  const [row] = _db
+    .insert(accounts)
+    .values({
+      email: user,
+      provider: inferProvider(imapHost),
+      protocol: 'imap',
+      user,
+      authCode,
+      imapHost: imapHost || null,
+      imapPort: process.env.IMAP_PORT ? parseInt(process.env.IMAP_PORT, 10) : null,
+      smtpHost: process.env.SMTP_HOST || null,
+      smtpPort: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : null,
+      displayName: '默认账号',
+    })
+    .returning()
+    .all() as any[]
+  return row?.id ?? null
+}
+
+/** 根据 IMAP host 推断 provider(用于 env 引导) */
+function inferProvider(host: string): '163' | '126' | 'qq' | 'gmail' | 'outlook' | 'custom' {
+  const h = (host || '').toLowerCase()
+  if (h.includes('163')) return '163'
+  if (h.includes('126')) return '126'
+  if (h.includes('qq')) return 'qq'
+  if (h.includes('gmail')) return 'gmail'
+  if (h.includes('office365') || h.includes('outlook')) return 'outlook'
+  return 'custom'
+}

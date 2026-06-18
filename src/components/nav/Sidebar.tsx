@@ -299,6 +299,14 @@ export function Sidebar({ unreadCount = 0, todoPendingCount = 0, onSearch, onRef
           👥 通讯录
         </Link>
         <Link
+          href="/rules"
+          className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${
+            isActive('/rules') ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+          }`}
+        >
+          ⚙️ 规则
+        </Link>
+        <Link
           href="/settings"
           className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${
             isActive('/settings') ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
